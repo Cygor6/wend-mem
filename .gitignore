@@ -1,0 +1,41 @@
+# .NET
+bin/
+obj/
+*.user
+*.pubxml.user
+.vs/
+.claude/settings.local.json
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# WAL audit logs (runtime generated)
+wal/
+
+# ONNX models — large files, download separately via integrations/download-model.ps1
+models/*.onnx
+models/*.bin
+models/*.ot
+
+# Goose session files
+.goose/sessions/
+.goose/recipe.yaml
+
+# Claude session files
+.claude/
+
+# Environment / secrets
+*.env
+.env.*
+
+# Test artifacts
+test-*
+smoke-*
+todo/
+
+# Build output
+publish/
+models/embeddinggemma
+test_bug1
+nul

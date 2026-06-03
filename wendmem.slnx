@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wendmem/Wendmem.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wendmem.Tests/Wendmem.Tests.csproj" />
+  </Folder>
+</Solution>

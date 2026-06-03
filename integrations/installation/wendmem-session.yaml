@@ -1,0 +1,33 @@
+version: 1.0
+title: "Wendmem session start"
+description: "Fetches wendmem context and configures the session"
+extensions:
+  - name: wendmem
+    type: streamable_http
+    url: http://localhost:5133/mcp
+
+instructions: |
+  You are working in wing: {{ wing }}.
+  Codebase is {{ code_root }}.
+  If the session starts in a subdirectory of the codebase, treat the current project folder as the effective code root.
+
+  Always start with:
+    WakeUp(wing: "{{ wing }}", seedQuery: "{{ seed }}")
+
+  Read palace://schema if the resource exists. Otherwise continue.
+
+  End every non-trivial session in this fixed order:
+    1. RecordEpisode(wing: "{{ wing }}", goal, plan, outcome, whatWorked, whatFailed, nextTime)
+         — only when a non-trivial task was attempted (success OR failure); skip for trivial Q&A.
+    2. Distill(wing: "{{ wing }}", sessionSummary: "<one paragraph about what was done>")
+    3. WikiWrite if Distill returns a scaffold (with real citation drawer IDs).
+
+parameters:
+  - name: wing
+    description: "Wing/project name"
+    default: "YOUR_WING_NAME"
+  - name: seed
+    description: "What you're working on today"
+  - name: code_root
+    description: "Default codebase"
+    default: "C:\\dev" # convention — override via WENDMEM_CODE_ROOT env var or .wendmem-code-root marker

@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:\\tools\\wendmem\\integrations\\hooks\\wakeup-hook.mjs",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node C:\\tools\\wendmem\\integrations\\hooks\\stop-hook.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

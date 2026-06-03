@@ -1,0 +1,56 @@
+﻿using System.Text.Json.Serialization;
+using Wendmem.Models;
+using Wendmem.Wiki.Models;
+
+namespace Wendmem.Wiki.Json;
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    WriteIndented = false)]
+[JsonSerializable(typeof(SuggestedAction))]
+[JsonSerializable(typeof(McpError))]
+[JsonSerializable(typeof(McpConfidence))]
+[JsonSerializable(typeof(McpMeta))]
+[JsonSerializable(typeof(McpResponse<WikiPageDto>))]
+[JsonSerializable(typeof(McpResponse<WikiWriteResultDto>))]
+[JsonSerializable(typeof(McpResponse<WikiSearchDto>))]
+[JsonSerializable(typeof(McpResponse<PendingUpdatesResponseDto>))]
+[JsonSerializable(typeof(McpResponse<DismissResponseDto>))]
+[JsonSerializable(typeof(McpResponse<LintWikiResponseDto>))]
+[JsonSerializable(typeof(McpResponse<DistillResponseDto>))]
+[JsonSerializable(typeof(McpResponse<WakeUpMapDto>))]
+[JsonSerializable(typeof(WikiPageDto))]
+[JsonSerializable(typeof(WikiPageHeaderDto))]
+[JsonSerializable(typeof(WikiIndexDto))]
+[JsonSerializable(typeof(WikiSearchHitDto))]
+[JsonSerializable(typeof(WikiSearchDto))]
+[JsonSerializable(typeof(BrokenCitationDto))]
+[JsonSerializable(typeof(WikiLintDto))]
+[JsonSerializable(typeof(WikiLogEntryDto))]
+[JsonSerializable(typeof(WikiLogDto))]
+[JsonSerializable(typeof(WikiWriteResultDto))]
+[JsonSerializable(typeof(WakeUpPageDto))]
+[JsonSerializable(typeof(WakeUpActivityDto))]
+[JsonSerializable(typeof(WakeUpMapDto))]
+[JsonSerializable(typeof(WakeUpActivityTailDto))]
+[JsonSerializable(typeof(WakeUpEpisodeDto))]
+[JsonSerializable(typeof(WakeUpSkillDto))]
+[JsonSerializable(typeof(WakeUpReflectionDraftDto))]
+[JsonSerializable(typeof(List<WakeUpEpisodeDto>))]
+[JsonSerializable(typeof(List<WakeUpSkillDto>))]
+[JsonSerializable(typeof(List<WakeUpReflectionDraftDto>))]
+[JsonSerializable(typeof(PendingUpdateSummaryDto))]
+[JsonSerializable(typeof(GetDrawerDto))]
+[JsonSerializable(typeof(PendingUpdateDto))]
+[JsonSerializable(typeof(PendingUpdatesResponseDto))]
+[JsonSerializable(typeof(DismissResponseDto))]
+[JsonSerializable(typeof(LintFindingDto))]
+[JsonSerializable(typeof(LintWikiResponseDto))]
+[JsonSerializable(typeof(DistillCandidatePageDto))]
+[JsonSerializable(typeof(DistillScaffoldDto))]
+[JsonSerializable(typeof(DistillResponseDto))]
+[JsonSerializable(typeof(List<PendingUpdateDto>))]
+[JsonSerializable(typeof(List<LintFindingDto>))]
+[JsonSerializable(typeof(List<DistillCandidatePageDto>))]
+internal sealed partial class WendmemWikiJsonContext : JsonSerializerContext;

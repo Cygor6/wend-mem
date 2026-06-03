@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Wendmem": {
+      "commandName": "Project",
+      "commandLineArgs": "serve"
+    }
+  }
+}
