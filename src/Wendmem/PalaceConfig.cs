@@ -206,9 +206,9 @@ public sealed class PalaceConfig
     /// <summary>
     /// Hard character budget for WakeUp output. The total character count of the
     /// WakeUp response (including header, L0, L1, L2, and tail sections) will not
-    /// exceed this value. When truncation is needed, layers are prioritized:
-    /// L0 (synthesis) is truncated first, then L2 (semantic), then L1 (recent).
-    /// L1 is never truncated below 1 result.
+    /// exceed this value. L0 (synthesis) gets first claim on the budget; L1/L2
+    /// absorb remaining space. The hard-ceiling cuts from the tail, preserving
+    /// L0 at the start.
     /// Default 3200 matches the prior hardcoded budget.
     /// </summary>
     public int WakeUpCharBudget { get; set; } = 3200;

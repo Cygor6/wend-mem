@@ -15,6 +15,7 @@
  */
 
 import { readFileSync, existsSync, readdirSync } from "fs";
+import { spawn } from "child_process";
 import { join, basename, dirname, resolve, relative, isAbsolute } from "path";
 import { env, cwd, stdout, stderr, stdin } from "process";
 
@@ -160,6 +161,39 @@ async function readStdin() {
 
         const wing = detectWing();
         const codeRoot = detectCodeRoot();
+
+        // Session-end transcript mining (non-blocking)
+        const transcriptPath =
+            hookInput.transcript_path || env.WENDMEM_TRANSCRIPT_PATH;
+        if (transcriptPath && existsSync(transcriptPath)) {
+            try {
+                const transcriptContent = readFileSync(transcriptPath, "utf8");
+                // Guard: skip if transcript contains employer-sensitive content
+                if (transcriptContent.includes("NW-WMS")) {
+                    stderr.write(
+                        `[wendmem-stop] Skipping mine-conversation: employer-sensitive (NW-WMS) content detected\n`,
+                    );
+                } else {
+                    const child = spawn(
+                        "wendmem",
+                        ["mine-conversation", transcriptPath, "--wing", wing],
+                        {
+                            detached: true,
+                            stdio: "ignore",
+                            windowsHide: true,
+                        },
+                    );
+                    child.unref();
+                    stderr.write(
+                        `[wendmem-stop] Spawned mine-conversation for ${transcriptPath} wing=${wing}\n`,
+                    );
+                }
+            } catch (err) {
+                stderr.write(
+                    `[wendmem-stop] mine-conversation spawn failed: ${err.message}\n`,
+                );
+            }
+        }
 
         const reminder = [
             "",

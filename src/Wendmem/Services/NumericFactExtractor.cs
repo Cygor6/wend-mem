@@ -35,7 +35,7 @@ sealed partial class NumericFactExtractor(KnowledgeGraph kg)
     [GeneratedRegex(@"chunk[_\s]size[:\s=]+(\d+)", RegexOptions.IgnoreCase)]
     private static partial Regex ChunkSizePattern();
 
-    public async Task ExtractAsync(string content, string room, string? source, DateTimeOffset minedAt, CancellationToken ct)
+    public async Task ExtractAsync(string content, string room, string? source, DateTimeOffset minedAt, CancellationToken ct, string? drawerId = null)
     {
         try
         {
@@ -52,6 +52,7 @@ sealed partial class NumericFactExtractor(KnowledgeGraph kg)
                     sourceRoom: room,
                     sourceFile: source,
                     confidence: 0.9,
+                    sourceRef: drawerId,
                     ct: ct).ConfigureAwait(false);
             }
         }

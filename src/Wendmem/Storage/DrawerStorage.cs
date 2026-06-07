@@ -1,5 +1,7 @@
 ﻿using System.Buffers;
+using System.Collections.Generic;
 using System.Numerics.Tensors;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using DuckDB.NET.Data;
@@ -827,20 +829,15 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
         var cosineIds = cosineTask.Result.Select(r => r.Drawer.Id).ToList();
 
         var kgQueryTokens = ExtractQueryTokens(query);
-        var kgIds = await KgDrawerIdsAsync(kgQueryTokens, room, ct);
+        var kgHits = await KgDrawerIdsAsync(kgQueryTokens, room, ct);
 
         // RRF fuse the three core channels (BM25 drawers, closets, cosine)
         var fusedIds = RrfFuse([drawerIds, closetIds, cosineIds]).ToList();
 
         var existingIds = new HashSet<string>(fusedIds);
-        for (int kgRank = 0; kgRank < kgIds.Count; kgRank++)
+        foreach (var (id, _) in kgHits)
         {
-            var id = kgIds[kgRank];
-            if (existingIds.Contains(id))
-            {
-                // KG drawer already in candidate set — bonus applied below after fetching scores.
-            }
-            else
+            if (!existingIds.Contains(id))
             {
                 fusedIds.Add(id);
                 existingIds.Add(id);
@@ -868,14 +865,13 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
         var rows = await ReadResultsWithImportanceAsync(cmd, ct);
         var byId = rows.ToDictionary(r => r.Drawer.Id);
 
-        // Apply KG RRF bonus to existing candidates, and set starting score for KG-only drawers
-        for (int kgRank = 0; kgRank < kgIds.Count; kgRank++)
+        for (int kgRank = 0; kgRank < kgHits.Count; kgRank++)
         {
-            var id = kgIds[kgRank];
+            var (id, confidence) = kgHits[kgRank];
             if (!byId.TryGetValue(id, out var existing))
                 continue;
-            var bonus = 1.0 / (60 + kgRank + 1);
-            byId[id] = existing with { Score = existing.Score + (float)bonus };
+            var bonus = confidence / (60 + kgRank + 1);
+            byId[id] = existing with { Score = existing.Score + bonus };
         }
 
         // Normalize scores to [0,1] so decay/boost and MMR operate on a consistent scale.
@@ -979,15 +975,15 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
 
     /// <summary>
     /// Given query tokens, find drawers whose content mentions those tokens.
-    /// Returns ordered drawer IDs for RRF fusion.
+    /// Returns (drawerId, maxConfidence) pairs for RRF fusion weighted by confidence.
     /// </summary>
-    private async Task<List<string>> KgDrawerIdsAsync(
+    private async Task<List<(string DrawerId, float Confidence)>> KgDrawerIdsAsync(
         IReadOnlyList<string> tokens, string? room, CancellationToken ct)
     {
         if (tokens.Count == 0)
             return [];
 
-        var union = new HashSet<string>();
+        var best = new Dictionary<string, float>();
 
         foreach (var token in tokens)
         {
@@ -995,7 +991,7 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
             using var cmd = ro.CreateCommand();
             cmd.CommandText = """
                 WITH direct AS (
-                    SELECT DISTINCT t1.drawer_id, t1.object AS neighbor_id
+                    SELECT DISTINCT t1.drawer_id, t1.object AS neighbor_id, t1.confidence
                     FROM entities e
                     JOIN triples t1 ON e.id = t1.subject
                     WHERE lower(e.name) LIKE '%' || $token || '%'
@@ -1003,25 +999,30 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
                       AND t1.drawer_id IS NOT NULL
                 ),
                 two_hop AS (
-                    SELECT DISTINCT t2.drawer_id
+                    SELECT DISTINCT t2.drawer_id, t2.confidence
                     FROM direct d
                     JOIN triples t2 ON d.neighbor_id = t2.subject
                     WHERE t2.valid_to IS NULL
                       AND t2.drawer_id IS NOT NULL
                 )
-                SELECT drawer_id FROM direct
-                UNION
-                SELECT drawer_id FROM two_hop
-                LIMIT 50
+                SELECT drawer_id, confidence FROM direct
+                UNION ALL
+                SELECT drawer_id, confidence FROM two_hop
                 """;
             cmd.Parameters.Add(new DuckDBParameter("token", token));
 
             using var reader = await Task.Run(() => cmd.ExecuteReader(), ct);
             while (reader.Read())
-                union.Add(reader.GetString(0));
+            {
+                var id = reader.GetString(0);
+                var conf = reader.IsDBNull(1) ? 1f : Convert.ToSingle(reader.GetValue(1));
+                ref float existing = ref CollectionsMarshal.GetValueRefOrAddDefault(best, id, out _);
+                if (conf > existing)
+                    existing = conf;
+            }
         }
 
-        return union.ToList();
+        return best.Select(kv => (kv.Key, kv.Value)).ToList();
     }
 
     public async Task<IReadOnlyList<Drawer>> RecentDrawersAsync(

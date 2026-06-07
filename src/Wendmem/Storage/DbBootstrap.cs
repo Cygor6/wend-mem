@@ -8,10 +8,14 @@ static class DbBootstrap
         ALTER TABLE drawers ADD COLUMN IF NOT EXISTS cluster_id       INTEGER;
         ALTER TABLE drawers ADD COLUMN IF NOT EXISTS cluster_d_bar    FLOAT;
         ALTER TABLE drawers ADD COLUMN IF NOT EXISTS cluster_d_eff    FLOAT;
-        ALTER TABLE drawers ADD COLUMN IF NOT EXISTS is_representative BOOLEAN NOT NULL DEFAULT TRUE;
         ALTER TABLE drawers ADD COLUMN IF NOT EXISTS last_accessed_at TIMESTAMPTZ;
-        ALTER TABLE drawers ADD COLUMN IF NOT EXISTS access_count     INTEGER NOT NULL DEFAULT 0;
-        ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS quality_score FLOAT NOT NULL DEFAULT 0.0;
+        """;
+
+    const string AlterWithConstraintsSql = """
+        ALTER TABLE drawers ADD COLUMN IF NOT EXISTS is_representative BOOLEAN DEFAULT TRUE;
+        ALTER TABLE drawers ADD COLUMN IF NOT EXISTS access_count     INTEGER DEFAULT 0;
+        ALTER TABLE wiki_pages ADD COLUMN IF NOT EXISTS quality_score FLOAT DEFAULT 0.0;
+        ALTER TABLE triples ADD COLUMN IF NOT EXISTS source_ref TEXT;
         """;
 
     public static void Initialize(DuckDBConnection db)
@@ -66,9 +70,7 @@ static class DbBootstrap
         // Migration: add cluster geometry + is_representative
         cmd.Parameters.Clear();
         cmd.CommandText = AlterSql;
-        try
-        { cmd.ExecuteNonQuery(); }
-        catch { }
+        cmd.ExecuteNonQuery();
 
         cmd.Parameters.Clear();
         cmd.CommandText = """
@@ -114,7 +116,8 @@ static class DbBootstrap
                 confidence  FLOAT NOT NULL DEFAULT 1.0,
                 source_room VARCHAR,
                 source_file VARCHAR,
-                drawer_id   VARCHAR
+                drawer_id   VARCHAR,
+                source_ref  VARCHAR
             )
             """;
         cmd.ExecuteNonQuery();
@@ -366,10 +369,16 @@ static class DbBootstrap
         cmd.Parameters.Clear();
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
-            INSERT INTO schema_version (version) SELECT 4
+            INSERT INTO schema_version (version) SELECT 5
                 WHERE NOT EXISTS (SELECT 1 FROM schema_version)
             """;
         cmd.ExecuteNonQuery();
+
+        cmd.Parameters.Clear();
+        cmd.CommandText = AlterWithConstraintsSql;
+        try
+        { cmd.ExecuteNonQuery(); }
+        catch { /* DuckDB may reject ALTER with constraints on existing columns */ }
 
         VerifyMigrations(db);
     }
@@ -409,6 +418,18 @@ static class DbBootstrap
         if (!eReader.Read())
             throw new InvalidOperationException(
                 "Migration verification failed: column 'entities.canonical_name' not found");
+
+        // Verify triples.source_ref exists (added in schema v5)
+        cmd.Parameters.Clear();
+        cmd.CommandText = """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name = 'triples'
+              AND column_name = 'source_ref'
+            """;
+        using var tReader = cmd.ExecuteReader();
+        if (!tReader.Read())
+            throw new InvalidOperationException(
+                "Migration verification failed: column 'triples.source_ref' not found");
     }
 
     static void BootstrapFts(DuckDBConnection db, string table, string idColumn,

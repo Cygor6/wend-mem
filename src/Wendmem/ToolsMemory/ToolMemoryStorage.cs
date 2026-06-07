@@ -121,7 +121,7 @@ public sealed class ToolMemoryStorage
         var succ = reader.GetInt32(1);
         var avgTime = reader.GetDouble(2);
         var avgTok = reader.GetDouble(3);
-        return new(toolName, total, succ, total > 0 ? (float)succ / total : 0f, avgTime, (int)avgTok);
+        return new(toolName, total, succ, (float)(succ + 1) / (total + 2), avgTime, (int)avgTok);
     }
 
     public async Task UpsertGuidelinesAsync(ToolMemory mem, CancellationToken ct)

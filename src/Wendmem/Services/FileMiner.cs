@@ -145,7 +145,7 @@ sealed class FileMiner(
             if (!adm.Admitted)
                 continue;
             var id = adm.Id;
-            _ = factExtractor.ExtractAsync(chunk, room, filePath, DateTimeOffset.UtcNow, ct);
+            _ = factExtractor.ExtractAsync(chunk, room, filePath, DateTimeOffset.UtcNow, ct, adm.Id);
             added++;
             newIds.Add(id);
         }

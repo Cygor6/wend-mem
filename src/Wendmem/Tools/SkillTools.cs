@@ -38,8 +38,7 @@ sealed class SkillTools
         var dtos = results.Select(r => new FindSkillDto(
             r.Id, r.Name, r.FolderPath, r.Description,
             r.SuccessCount, r.FailureCount,
-            r.SuccessCount + r.FailureCount > 0
-                ? (float)r.SuccessCount / (r.SuccessCount + r.FailureCount) : 0f
+            (float)(r.SuccessCount + 1) / (r.SuccessCount + r.FailureCount + 2)
         )).ToList();
 
         return JsonSerializer.Serialize(

@@ -113,6 +113,7 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         string? sourceRoom = null,
         string? sourceFile = null,
         string? drawerId = null,
+        string? sourceRef = null,
         CancellationToken ct = default)
     {
         // auto-create entities and canonicalize predicate
@@ -129,10 +130,10 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
             cmd.CommandText = """
                 INSERT INTO triples
                     (id, subject, predicate, object, valid_from, valid_to,
-                     confidence, source_room, source_file, drawer_id)
+                     confidence, source_room, source_file, drawer_id, source_ref)
                 VALUES
                     ($id, $subject, $predicate, $object, $valid_from, $valid_to,
-                     $confidence, $source_room, $source_file, $drawer_id)
+                     $confidence, $source_room, $source_file, $drawer_id, $source_ref)
                 ON CONFLICT (id) DO NOTHING
                 """;
             cmd.Parameters.Add(new DuckDBParameter("id", id));
@@ -145,6 +146,7 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
             cmd.Parameters.Add(new DuckDBParameter("source_room", sourceRoom ?? (object)DBNull.Value));
             cmd.Parameters.Add(new DuckDBParameter("source_file", sourceFile ?? (object)DBNull.Value));
             cmd.Parameters.Add(new DuckDBParameter("drawer_id", drawerId ?? (object)DBNull.Value));
+            cmd.Parameters.Add(new DuckDBParameter("source_ref", sourceRef ?? (object)DBNull.Value));
             await Task.Run(() => cmd.ExecuteNonQuery(), ct);
         }, ct);
 
@@ -405,9 +407,9 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         if (wing is null)
         {
             cmd.CommandText = """
-                SELECT subject, predicate, object FROM triples
+                SELECT subject, predicate, object, source_ref FROM triples
                 WHERE valid_to IS NULL
-                ORDER BY valid_from DESC
+                ORDER BY confidence DESC, valid_from DESC
                 LIMIT $limit
                 """;
         }
@@ -417,12 +419,12 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
             // Triples without a drawer_id (drawer_id IS NULL) are excluded when
             // a wing filter is applied — they have no wing association.
             cmd.CommandText = """
-                SELECT DISTINCT t.subject, t.predicate, t.object
+                SELECT DISTINCT t.subject, t.predicate, t.object, t.source_ref
                 FROM triples t
                 JOIN drawers d ON d.id = t.drawer_id
                 WHERE t.valid_to IS NULL
                   AND d.wing = $wing
-                ORDER BY t.valid_from DESC
+                ORDER BY t.confidence DESC, t.valid_from DESC
                 LIMIT $limit
                 """;
             cmd.Parameters.Add(new DuckDBParameter("wing", wing));
@@ -433,8 +435,11 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         var list = new List<TripleSummary>();
         using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
+        {
+            var sourceRef = reader.IsDBNull(3) ? null : reader.GetString(3);
             list.Add(new TripleSummary(
-                reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+                reader.GetString(0), reader.GetString(1), reader.GetString(2), sourceRef));
+        }
         return list;
     }
 
@@ -547,7 +552,7 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
     public sealed record EntityFacts(string EntityName, IReadOnlyList<PredicateTriple> Triples);
     public sealed record PredicateTriple(string Subject, string Predicate, string Object, double Confidence);
 
-    public sealed record TripleSummary(string Subject, string Predicate, string Object);
+    public sealed record TripleSummary(string Subject, string Predicate, string Object, string? SourceRef);
 
     static string TunnelId(string topic, string wa, string ra, string wb, string rb)
     {

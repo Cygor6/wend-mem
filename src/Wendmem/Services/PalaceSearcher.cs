@@ -30,8 +30,10 @@ sealed class PalaceSearcher(
     const int RecencyCount = 5;
     const int RelevanceCount = 10;
     // Hard character budget for total WakeUp output — driven by PalaceConfig.WakeUpCharBudget.
-    const int TailMinBudget = 1200;
-    const int SynthesisMaxBudget = 1600;
+    const int TailMinBudget = 600;
+    // L0 (synthesis) gets first claim on the budget. L1/L2 absorb what remains.
+    // The hard-ceiling at the end cuts from the tail, preserving synthesis at the start.
+    const int SynthesisGuaranteedMin = 1600;
 
     // How much weight the structured side-index overlap gets in re-ranking
     const float SideIndexBoostWeight = 0.15f;
@@ -109,7 +111,9 @@ sealed class PalaceSearcher(
         {
             sb.AppendLine("## Active Facts");
             foreach (var f in facts)
-                sb.AppendLine($"{f.Subject} → {f.Predicate} → {f.Object}");
+                sb.AppendLine(f.SourceRef is not null
+                    ? $"{f.Subject} → {f.Predicate} → {f.Object} (ref:{f.SourceRef})"
+                    : $"{f.Subject} → {f.Predicate} → {f.Object}");
             sb.AppendLine();
         }
 
@@ -152,9 +156,12 @@ sealed class PalaceSearcher(
         if (sb.Length > 0)
             sb.AppendLine("---");
 
+        // L0 synthesis gets first claim on remaining budget after header.
+        // L1/L2 only get what's left after synthesis is fully rendered.
         var charBudget = config.WakeUpCharBudget;
         var headerLen = sb.Length;
 
+        var l0Budget = Math.Max(SynthesisGuaranteedMin, charBudget - headerLen - TailMinBudget);
         var l0Ids = new List<string>();
         var l0Sb = new StringBuilder();
         foreach (var d in synthesis)
@@ -162,13 +169,14 @@ sealed class PalaceSearcher(
             if (!seen.Add(d.Id))
                 continue;
             int entryLen = $"[{d.Wing}/{d.Room}] (synthesis)\n{d.Content}\n\n".Length;
-            if (l0Sb.Length + entryLen > SynthesisMaxBudget)
+            if (l0Sb.Length + entryLen > l0Budget)
                 break;
             l0Sb.Append($"[{d.Wing}/{d.Room}] (synthesis)\n{d.Content}\n\n");
             l0Ids.Add(d.Id);
         }
         sb.Append(l0Sb);
 
+        // Tail budget is whatever remains after header + L0 synthesis.
         var tailBudget = Math.Max(TailMinBudget, charBudget - headerLen - l0Sb.Length);
 
         var l1List = new List<Drawer>();
@@ -253,9 +261,7 @@ sealed class PalaceSearcher(
                 if (skills.Count > 0)
                     skillDtos = skills.Select(s => new WakeUpSkillDto(
                         s.Id, s.Name, s.FolderPath, s.Description,
-                        s.SuccessCount + s.FailureCount > 0
-                            ? (float)s.SuccessCount / (s.SuccessCount + s.FailureCount)
-                            : 0f)).ToList();
+                        (float)(s.SuccessCount + 1) / (s.SuccessCount + s.FailureCount + 2))).ToList();
             }
             catch (Exception ex)
             {
@@ -291,8 +297,8 @@ sealed class PalaceSearcher(
         var content = sb.Length > 0 ? sb.ToString().TrimEnd() : "(no context available)";
 
         // Hard ceiling: ensure total output does not exceed the configured budget.
-        // Truncation priority: L0 (start of content) → L2 → L1 (most protected).
-        // This is a safety net for when header + tail JSON push total over budget.
+        // Truncation cuts from the end (tail JSON / next-steps), preserving L0 synthesis
+        // at the start. L1/L2 also get cut before L0 since they sit after synthesis.
         if (content.Length > charBudget)
             content = content[..charBudget];
 
@@ -344,7 +350,9 @@ sealed class PalaceSearcher(
         {
             sb.AppendLine("## Active Facts");
             foreach (var f in facts)
-                sb.AppendLine($"{f.Subject} → {f.Predicate} → {f.Object}");
+                sb.AppendLine(f.SourceRef is not null
+                    ? $"{f.Subject} → {f.Predicate} → {f.Object} (ref:{f.SourceRef})"
+                    : $"{f.Subject} → {f.Predicate} → {f.Object}");
             sb.AppendLine();
         }
 
@@ -388,6 +396,7 @@ sealed class PalaceSearcher(
         var charBudget = config.WakeUpCharBudget;
         var headerLen = sb.Length;
 
+        var l0Budget = Math.Max(SynthesisGuaranteedMin, charBudget - headerLen - TailMinBudget);
         var l0Ids = new List<string>();
         var l0Sb = new StringBuilder();
         foreach (var d in synthesis)
@@ -395,7 +404,7 @@ sealed class PalaceSearcher(
             if (!seen.Add(d.Id))
                 continue;
             int entryLen = $"[{d.Wing}/{d.Room}] (synthesis)\n{d.Content}\n\n".Length;
-            if (l0Sb.Length + entryLen > SynthesisMaxBudget)
+            if (l0Sb.Length + entryLen > l0Budget)
                 break;
             l0Sb.Append($"[{d.Wing}/{d.Room}] (synthesis)\n{d.Content}\n\n");
             l0Ids.Add(d.Id);

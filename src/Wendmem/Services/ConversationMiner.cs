@@ -40,7 +40,7 @@ sealed class ConversationMiner(
                 if (!adm.Admitted)
                     continue;
                 var id = adm.Id;
-                _ = factExtractor.ExtractAsync(chunk, "conversation", sourceUri, DateTimeOffset.UtcNow, ct);
+                _ = factExtractor.ExtractAsync(chunk, "conversation", sourceUri, DateTimeOffset.UtcNow, ct, id);
                 added++;
                 newDrawerIds.Add(id);
             }

@@ -95,7 +95,7 @@ These control how source files are split into drawers at mining time.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `WakeUpMinL2Score` | `float` | `0.25` | Minimum cosine similarity for WakeUp L2 (semantic) drawers. Results below this are excluded. Set to `0.0` to include all top-k results. |
-| `WakeUpCharBudget` | `int` | `3200` | Hard character limit on the WakeUp response. When truncation is needed: L0 (synthesis) is cut first, then L2 (semantic), then L1 (recent). L1 always keeps at least 1 result. |
+| `WakeUpCharBudget` | `int` | `3200` | Hard character limit on the WakeUp response. L0 (synthesis) gets first claim on the budget. L1/L2 absorb remaining space. The hard-ceiling cuts from the tail, preserving L0 at the start. |
 | `MinRetrievalScore` | `float` | `0.0` | Global minimum score for SearchMemories results. When > 0, if ALL results are below this threshold, the response returns `insufficient_evidence` with an empty list. |
 
 ### Skills

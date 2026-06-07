@@ -129,8 +129,8 @@ public sealed class SkillStorage
                 continue;
             var success = reader.GetInt32(5);
             var failure = reader.GetInt32(6);
-            var total = Math.Max(1, success + failure);
-            var boosted = score + 0.10f * ((float)success / total);
+            var laplace = (float)(success + 1) / (success + failure + 2);
+            var boosted = score + 0.10f * laplace;
             results.Add(new SkillSearchResult(
                 reader.GetString(0), reader.GetString(1), reader.GetString(2),
                 reader.GetString(3), reader.GetString(4), success, failure, score, boosted));

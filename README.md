@@ -1,6 +1,6 @@
 <div align="center">
 
-# wendmem
+# wend-mem
 
 **A local-first, offline memory system for AI agents.**
 
@@ -17,7 +17,7 @@ Give your agents a compounding knowledge layer — semantically searchable, temp
 
 ---
 
-## Why wendmem?
+## Why wend-mem?
 
 AI agents forget everything between sessions. Static instruction files (`CLAUDE.md`, `SKILL.md`) help, but they don't *evolve* — they can't record what was decided yesterday, what failed last week, or how this particular codebase actually works.
 
@@ -27,7 +27,7 @@ Everything runs locally against one `.duckdb` file. No cloud, no separate vector
 
 ---
 
-## What Is wendmem?
+## What Is wend-mem?
 
 wendmem is a **persistent, structured memory for AI agents** — a place where everything an agent reads, decides, and learns is stored, organized, and made retrievable for every session that follows. Think of it less as a database and more as an external long-term memory that an agent can grow and consult on its own.
 
