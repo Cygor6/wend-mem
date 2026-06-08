@@ -63,12 +63,26 @@ sealed class FileMiner(
     public async Task<(int FilesProcessed, int DrawersAdded, int FilesSkipped)>
         MineDirectoryAsync(string rootPath, string wing, string? room, CancellationToken ct)
     {
+        if (!Directory.Exists(rootPath))
+        {
+            Console.Error.WriteLine($"Skipped directory '{rootPath}': directory not found.");
+            return (0, 0, 0);
+        }
+
         int processed = 0, added = 0, skipped = 0;
         var newDrawerIds = new List<string>();
 
-        foreach (var file in Directory
-            .EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)
-            .Where(f => !IsSkipped(f)))
+        IEnumerable<string> files;
+        try
+        { files = Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to enumerate '{rootPath}': {ex.GetType().Name} — {ex.Message}");
+            return (0, 0, 0);
+        }
+
+        foreach (var file in files.Where(f => !IsSkipped(f)))
         {
             var fileRoom = !string.IsNullOrWhiteSpace(room)
                 ? room
@@ -102,12 +116,25 @@ sealed class FileMiner(
         string text;
         try
         { text = await File.ReadAllTextAsync(filePath, ct); }
-        catch { return (0, 0, 1, []); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Skipped '{filePath}': {ex.GetType().Name} — {ex.Message}");
+            return (0, 0, 1, []);
+        }
 
         if (string.IsNullOrWhiteSpace(text))
             return (1, 0, 0, []);
 
-        var mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(filePath)).ToUnixTimeMilliseconds();
+        long mtime;
+        try
+        { mtime = new DateTimeOffset(File.GetLastWriteTimeUtc(filePath)).ToUnixTimeMilliseconds(); }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Skipped '{filePath}': {ex.GetType().Name} — {ex.Message}");
+            return (0, 0, 1, []);
+        }
         var existing = await storage.GetSourceMtimeAsync(filePath, ct);
         if (existing == mtime)
             return (1, 0, 0, []);
@@ -145,7 +172,7 @@ sealed class FileMiner(
             if (!adm.Admitted)
                 continue;
             var id = adm.Id;
-            _ = factExtractor.ExtractAsync(chunk, room, filePath, DateTimeOffset.UtcNow, ct, adm.Id);
+            _ = factExtractor.ExtractAsync(chunk, room, filePath, DateTimeOffset.UtcNow, ct);
             added++;
             newIds.Add(id);
         }

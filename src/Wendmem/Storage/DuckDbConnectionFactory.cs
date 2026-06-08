@@ -16,8 +16,7 @@ public sealed class DuckDbConnectionFactory : IDisposable, IAsyncDisposable
     public DuckDbConnectionFactory(string dbPath)
     {
         _dbPath = dbPath;
-        _writeConnection = new DuckDBConnection($"Data Source={dbPath}");
-        _writeConnection.Open();
+        _writeConnection = OpenWithWalRecovery($"Data Source={dbPath}");
 
         // Resolve temp dir relative to the database file
         var dbDir = System.IO.Path.GetDirectoryName(dbPath)!;
@@ -34,6 +33,36 @@ public sealed class DuckDbConnectionFactory : IDisposable, IAsyncDisposable
             """;
         cmd.ExecuteNonQuery();
         DbBootstrap.Initialize(_writeConnection);
+    }
+
+    static DuckDBConnection OpenWithWalRecovery(string connectionString)
+    {
+        var conn = new DuckDBConnection(connectionString);
+        try
+        {
+            conn.Open();
+            return conn;
+        }
+        catch (DuckDBException ex) when (ex.Message.Contains("WAL"))
+        {
+            // Derive the database path from the connection string to locate the WAL file.
+            var dbPath = connectionString.Split("Data Source=", StringSplitOptions.None)
+                .Skip(1).FirstOrDefault()?.Split(';').First() ?? "";
+            var walPath = dbPath + ".wal";
+
+            Console.Error.WriteLine(
+                $"Recovering from corrupt WAL at '{walPath}' — last incomplete write lost.");
+
+            conn.Dispose();
+
+            if (File.Exists(walPath))
+                File.Delete(walPath);
+
+            // Retry — if this also throws, let it propagate.
+            conn = new DuckDBConnection(connectionString);
+            conn.Open();
+            return conn;
+        }
     }
 
     /// <summary>
@@ -70,10 +99,7 @@ public sealed class DuckDbConnectionFactory : IDisposable, IAsyncDisposable
     /// </summary>
     public DuckDBConnection OpenReadOnly()
     {
-        var conn = new DuckDBConnection(
-            $"Data Source={_dbPath};ACCESS_MODE=READ_ONLY");
-        conn.Open();
-        return conn;
+        return OpenWithWalRecovery($"Data Source={_dbPath};ACCESS_MODE=READ_ONLY");
     }
 
     public void Dispose()
