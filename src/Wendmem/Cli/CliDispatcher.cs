@@ -57,6 +57,7 @@ internal static class CliDispatcher
             "room-patterns" => await new RoomPatternsCommand().RunAsync(args[1..], services, ct),
             "kg-eval" => await new KgEvalCommand().RunAsync(args[1..], services, ct),
             "skill-opt" => await new SkillOptCommand().RunAsync(args[1..], services, ct),
+            "graph" => await GraphCommand.RunAsync(args[1..], services, ct),
             "rescore" => await new RescoreCommand().RunAsync(args[1..], services, ct),
             "calibrate" => await new CalibrateCommand().RunAsync(args[1..], services, ct),
             "serve" => -2,
@@ -184,6 +185,10 @@ internal static class CliDispatcher
 
             Calibration:
               wendmem calibrate --wing W [--samples N] [--write-config] [--dry-run]
+
+            Graph visualization:
+              wendmem graph --wing W [--output <path>] [--limit N]
+                            [--no-drawers] [--no-triples] [--no-episodes] [--no-skills]
 
             Experience memory:
               wendmem search-task-memory <query> --wing W

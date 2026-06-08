@@ -380,6 +380,31 @@ wendmem calibrate --wing work --write-config
 
 Requires the ONNX embedding model to be loaded.
 
+## Graph Visualization
+
+### graph
+
+Generate a self-contained interactive HTML knowledge graph for a wing. The output file uses D3.js force simulation to visualize relationships between wiki pages, knowledge-graph triples, drawers, episodes, and skills.
+
+```bash
+wendmem graph --wing work
+wendmem graph --wing work --output my-graph.html
+wendmem graph --wing work --no-drawers --no-episodes
+wendmem graph --wing work --limit 50
+```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--wing` | Yes | Wing to visualize |
+| `--output` | No | Output HTML file path (default `graph-<wing>.html`) |
+| `--limit` | No | Max items per data source (default 150) |
+| `--no-drawers` | No | Exclude drawer nodes |
+| `--no-triples` | No | Exclude knowledge-graph triple nodes |
+| `--no-episodes` | No | Exclude episode nodes |
+| `--no-skills` | No | Exclude skill nodes |
+
+Node types: wing (root), wiki, triple, drawer, episode, skill. Links are derived from wikilinks, citations, KG predicates, and source references.
+
 ## Episodes
 
 ### episode list

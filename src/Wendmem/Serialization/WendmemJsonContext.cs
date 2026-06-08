@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Serialization;
+using Wendmem.Cli.Commands;
 using Wendmem.Eval;
 using Wendmem.Experiences;
 using Wendmem.Models;
@@ -91,4 +92,9 @@ namespace Wendmem.Serialization;
 [JsonSerializable(typeof(SkillEdit))]
 [JsonSerializable(typeof(List<SkillEdit>))]
 [JsonSerializable(typeof(SkillOptResult))]
+[JsonSerializable(typeof(GraphNode))]
+[JsonSerializable(typeof(GraphLink))]
+[JsonSerializable(typeof(GraphData))]
+[JsonSerializable(typeof(List<GraphNode>))]
+[JsonSerializable(typeof(List<GraphLink>))]
 public sealed partial class WendmemJsonContext : JsonSerializerContext;

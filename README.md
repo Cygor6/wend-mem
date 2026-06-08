@@ -306,6 +306,7 @@ wendmem activity [--wing W] [--limit N]        # Recent palace operations
 wendmem search <query>                         # FTS (BM25) search
 wendmem search-semantic <query>                # Cosine similarity search
 wendmem grep-exact <pattern>                   # Exact string or regex search
+wendmem graph --wing W [--output path]          # Generate interactive HTML knowledge graph
 ```
 
 The full command set (episodes, skills, reflection, knowledge-graph resolution, salience rescoring, …) is documented in [`documentation/06-cli-commands.md`](documentation/06-cli-commands.md).

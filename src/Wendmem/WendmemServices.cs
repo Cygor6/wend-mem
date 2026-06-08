@@ -144,7 +144,8 @@ static class WendmemServices
             .AddSingleton<EpisodeStorage>()
             .AddSingleton<SkillStorage>()
             .AddSingleton<ReflectionDraftStorage>()
-            .AddSingleton<ReflectionService>();
+            .AddSingleton<ReflectionService>()
+            .AddSingleton<GraphDataService>();
 
         return services;
     }
