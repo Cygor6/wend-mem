@@ -89,14 +89,14 @@ public class V1SmokeTests
         // Build text that exceeds TargetSize (800) with a heading in the middle
         var text = "Intro paragraph. " + new string('x', 700) + "\n\n## Section Two\n" +
             "Content in section two. " + new string('y', 700);
-        var chunks = TopicShiftChunker.Chunk(text);
+        var chunks = StructuralChunker.Chunk(text);
         await Assert.That(chunks.Count).IsGreaterThan(1);
     }
 
     [Test]
     public async Task F4_Chunking_ShortTextReturnsSingleChunk()
     {
-        var chunks = TopicShiftChunker.Chunk("Short text");
+        var chunks = StructuralChunker.Chunk("Short text");
         await Assert.That(chunks.Count).IsEqualTo(1);
         await Assert.That(chunks[0]).IsEqualTo("Short text");
     }
@@ -107,14 +107,14 @@ public class V1SmokeTests
         var text = "Some preamble with words. " + new string('a', 700) +
             "\npublic class Foo\n{\n}\n" +
             "Another section after class. " + new string('b', 700);
-        var chunks = TopicShiftChunker.Chunk(text);
+        var chunks = StructuralChunker.Chunk(text);
         await Assert.That(chunks.Count).IsGreaterThan(1);
     }
 
     [Test]
     public async Task F4_Chunking_EmptyInputReturnsEmpty()
     {
-        var chunks = TopicShiftChunker.Chunk("");
+        var chunks = StructuralChunker.Chunk("");
         await Assert.That(chunks.Count).IsEqualTo(0);
     }
 

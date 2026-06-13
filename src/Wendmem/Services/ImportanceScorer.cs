@@ -161,7 +161,7 @@ public sealed partial class ImportanceScorer
         int matches = 0;
         foreach (var name in entityNames)
         {
-            if (lower.Contains(name.ToLowerInvariant()))
+            if (lower.Contains(name))
                 matches++;
         }
 
@@ -223,7 +223,7 @@ public sealed partial class ImportanceScorer
         cmd.CommandText = "SELECT name FROM entities";
         await using var reader = await cmd.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
-            names.Add(reader.GetString(0));
+            names.Add(reader.GetString(0).ToLowerInvariant());
         return names;
     }
 
@@ -256,20 +256,24 @@ public sealed partial class ImportanceScorer
     private async Task PersistScoresAsync(
         IReadOnlyList<(string Id, float Score)> updates, CancellationToken ct)
     {
-        if (_dbFactory is null)
+        if (_dbFactory is null || updates.Count == 0)
             return;
+
+        var rows = string.Join(", ", updates.Select((_, i) => $"($id{i}, $s{i})"));
         await _dbFactory.ExecuteWriteAsync(async db =>
         {
-            foreach (var (id, score) in updates)
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = $"""
+                UPDATE drawers SET importance = CAST(v.score AS DOUBLE)
+                FROM (VALUES {rows}) AS v(id, score)
+                WHERE drawers.id = v.id
+                """;
+            for (int i = 0; i < updates.Count; i++)
             {
-                await using var cmd = db.CreateCommand();
-                cmd.CommandText = """
-                    UPDATE drawers SET importance = $score WHERE id = $id
-                    """;
-                cmd.Parameters.Add(new DuckDBParameter("score", (double)score));
-                cmd.Parameters.Add(new DuckDBParameter("id", id));
-                await cmd.ExecuteNonQueryAsync(ct);
+                cmd.Parameters.Add(new DuckDBParameter($"id{i}", updates[i].Id));
+                cmd.Parameters.Add(new DuckDBParameter($"s{i}", (double)updates[i].Score));
             }
+            await cmd.ExecuteNonQueryAsync(ct);
         }, ct);
     }
 

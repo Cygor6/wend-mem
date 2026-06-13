@@ -32,7 +32,7 @@ sealed class ConversationMiner(
 
             var chunks = config.TopicShiftChunkingEnabled
                 ? await topicShiftChunker.ChunkAsync(turn, ct)
-                : TopicShiftChunker.Chunk(turn);
+                : StructuralChunker.Chunk(turn);
 
             foreach (var chunk in chunks)
             {

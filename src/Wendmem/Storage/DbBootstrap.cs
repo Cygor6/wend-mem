@@ -92,8 +92,17 @@ static class DbBootstrap
         { cmd.ExecuteNonQuery(); }
         catch { }
         cmd.Parameters.Clear();
+        // Backfill must mirror KnowledgeGraph.Canonicalize: lowercase, strip
+        // whitespace/-/_, fold diacritics (strip_accents ≈ FoldToAscii), then
+        // drop anything outside printable ASCII. The old lower(name) backfill
+        // produced canonicals like "sql server" that Canonicalize ("sqlserver")
+        // could never resolve, creating silent duplicates.
         cmd.CommandText = """
-            UPDATE entities SET canonical_name = lower(name) WHERE canonical_name IS NULL
+            UPDATE entities
+            SET canonical_name = regexp_replace(
+                    strip_accents(regexp_replace(lower(name), '[\s\-_]+', '', 'g')),
+                    '[^\x20-\x7E]+', '', 'g')
+            WHERE canonical_name IS NULL
             """;
         try
         { cmd.ExecuteNonQuery(); }
@@ -367,9 +376,14 @@ static class DbBootstrap
         cmd.ExecuteNonQuery();
 
         cmd.Parameters.Clear();
+        // v5 = triples.source_ref. v6 = canonicalization baseline (FoldToAscii
+        // canonicals + recomputed entity/triple hash ids). Fresh databases have
+        // no data to migrate, so they start at 6; existing v5 databases are
+        // upgraded by KnowledgeGraph.MigrateCanonicalizationAsync at startup,
+        // which self-gates on this version and bumps it to 6 when done.
         cmd.CommandText = """
             CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);
-            INSERT INTO schema_version (version) SELECT 5
+            INSERT INTO schema_version (version) SELECT 6
                 WHERE NOT EXISTS (SELECT 1 FROM schema_version)
             """;
         cmd.ExecuteNonQuery();

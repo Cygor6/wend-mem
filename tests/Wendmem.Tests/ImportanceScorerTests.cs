@@ -39,7 +39,9 @@ public sealed class ImportanceScorerTests
         var scorer = CreateScorer();
 
         var content = "The project uses Wendmem for memory management.";
-        var entities = new List<string> { "Wendmem", "DuckDB", "Gemma" };
+        // Entity names must be lowercase — the scorer lowercases content and
+        // expects callers (e.g. LoadEntityNamesAsync) to provide lowered names.
+        var entities = new List<string> { "wendmem", "duckdb", "gemma" };
 
         var withoutEntities = scorer.ScoreHeuristic(content, null);
         var withEntities = scorer.ScoreHeuristic(content, entities);

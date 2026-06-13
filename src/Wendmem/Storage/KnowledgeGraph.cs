@@ -10,36 +10,274 @@ namespace Wendmem.Storage;
 sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.ActivityLog? activityLog = null)
 {
     // KGGen-inspired predicate canonicalization: maps common aliases
-    // to a single canonical predicate, reducing KG sparsity from
-    // predicate duplication (NeurIPS '25, Stanford).
-    static readonly Dictionary<string, string> PredicateAliases = new(StringComparer.OrdinalIgnoreCase)
+    // (English AND Swedish) to a single canonical predicate, reducing KG
+    // sparsity from predicate duplication (NeurIPS '25, Stanford).
+    //
+    // Keys are pre-normalized: lowercase, [\s-]+ → "_", diacritics folded
+    // to ASCII ("beror på" → "beror_pa"). The canonical vocabulary is kept
+    // in English so the graph stays unified regardless of input language.
+    //
+    // NOTE the deliberate distinction between:
+    //   "publicerar_till" (publishes to a queue/topic) → publishes_to
+    //   "publiceras_till" (is published/deployed to)   → runs_on
+    static readonly Dictionary<string, string> PredicateAliases = new(StringComparer.Ordinal)
     {
+        // uses
         ["uses_tool"] = "uses",
         ["uses_library"] = "uses",
         ["utilizes"] = "uses",
-        ["depends_on"] = "depends_on",
-        ["dependency_of"] = "depends_on",
+        ["built_with"] = "uses",
+        ["anvander"] = "uses",
+        ["nyttjar"] = "uses",
+        ["kor"] = "uses",                      // "X kör Y"
+        ["byggd_med"] = "uses",
+
+        // depends_on
         ["has_dependency"] = "depends_on",
+        ["requires"] = "depends_on",
+        ["needs"] = "depends_on",
+        ["beror_pa"] = "depends_on",
+        ["kraver"] = "depends_on",
+        ["behover"] = "depends_on",
+        ["forutsatter"] = "depends_on",
+        ["bygger_pa"] = "depends_on",
+        ["ar_beroende_av"] = "depends_on",
+        ["beroende_av"] = "depends_on",
+
+        // works_at
         ["works_for"] = "works_at",
         ["employed_by"] = "works_at",
         ["employed_at"] = "works_at",
+        ["jobbar_pa"] = "works_at",
+        ["jobbar_hos"] = "works_at",
+        ["arbetar_pa"] = "works_at",
+        ["arbetar_hos"] = "works_at",
+        ["anstalld_pa"] = "works_at",
+        ["anstalld_hos"] = "works_at",
+
+        // part_of
         ["is_part_of"] = "part_of",
         ["belongs_to"] = "part_of",
         ["member_of"] = "part_of",
+        ["del_av"] = "part_of",
+        ["tillhor"] = "part_of",
+        ["ingar_i"] = "part_of",
+        ["hor_till"] = "part_of",
+
+        // is_type
         ["is_a"] = "is_type",
         ["type_of"] = "is_type",
         ["instance_of"] = "is_type",
-        ["located_in"] = "located_in",
+        ["kind_of"] = "is_type",
+        ["ar_en"] = "is_type",
+        ["ar_ett"] = "is_type",
+        ["ar_typ_av"] = "is_type",
+
+        // located_in
         ["lives_in"] = "located_in",
         ["resides_in"] = "located_in",
-        ["has_version"] = "has_version",
+        ["based_in"] = "located_in",
+        ["ligger_i"] = "located_in",
+        ["bor_i"] = "located_in",
+        ["finns_i"] = "located_in",
+        ["baserad_i"] = "located_in",
+        ["placerad_i"] = "located_in",
+
+        // has_version
         ["version"] = "has_version",
-        ["version_of"] = "has_version",
+        ["har_version"] = "has_version",
+        ["kor_version"] = "has_version",
+
+        // runs_on (runtime/deploy target)
+        ["deployed_on"] = "runs_on",
+        ["deployed_to"] = "runs_on",
+        ["hosted_on"] = "runs_on",
+        ["hosted_in"] = "runs_on",
+        ["kors_pa"] = "runs_on",
+        ["driftas_pa"] = "runs_on",
+        ["deployas_till"] = "runs_on",
+        ["publiceras_till"] = "runs_on",
+        ["hostas_pa"] = "runs_on",
+        ["hostad_pa"] = "runs_on",
+
+        // integrates_with
+        ["connects_to"] = "integrates_with",
+        ["talks_to"] = "integrates_with",
+        ["communicates_with"] = "integrates_with",
+        ["integrerar_med"] = "integrates_with",
+        ["kommunicerar_med"] = "integrates_with",
+        ["ansluter_till"] = "integrates_with",
+        ["kopplad_till"] = "integrates_with",
+        ["pratar_med"] = "integrates_with",
+
+        // written_in (implementation language)
+        ["implemented_in"] = "written_in",
+        ["coded_in"] = "written_in",
+        ["programmed_in"] = "written_in",
+        ["skriven_i"] = "written_in",
+        ["implementerad_i"] = "written_in",
+        ["kodad_i"] = "written_in",
+        ["programmerad_i"] = "written_in",
+        ["utvecklad_i"] = "written_in",
+
+        // created_by
+        ["developed_by"] = "created_by",
+        ["built_by"] = "created_by",
+        ["authored_by"] = "created_by",
+        ["made_by"] = "created_by",
+        ["written_by"] = "created_by",
+        ["skapad_av"] = "created_by",
+        ["utvecklad_av"] = "created_by",
+        ["byggd_av"] = "created_by",
+        ["skriven_av"] = "created_by",
+        ["gjord_av"] = "created_by",
+
+        // publishes_to / consumes_from (messaging: RabbitMQ, MassTransit, ...)
+        ["sends_to"] = "publishes_to",
+        ["publicerar_till"] = "publishes_to",
+        ["skickar_till"] = "publishes_to",
+        ["subscribes_to"] = "consumes_from",
+        ["reads_from"] = "consumes_from",
+        ["listens_to"] = "consumes_from",
+        ["receives_from"] = "consumes_from",
+        ["konsumerar_fran"] = "consumes_from",
+        ["prenumererar_pa"] = "consumes_from",
+        ["lyssnar_pa"] = "consumes_from",
+        ["laser_fran"] = "consumes_from",
+        ["tar_emot_fran"] = "consumes_from",
+
+        // stores_in
+        ["stores_data_in"] = "stores_in",
+        ["persists_to"] = "stores_in",
+        ["saved_in"] = "stores_in",
+        ["lagrar_i"] = "stores_in",
+        ["sparar_i"] = "stores_in",
+        ["lagras_i"] = "stores_in",
+        ["sparas_i"] = "stores_in",
+
+        // replaces
+        ["supersedes"] = "replaces",
+        ["ersatter"] = "replaces",
+
+        // monitors
+        ["observes"] = "monitors",
+        ["overvakar"] = "monitors",
+        ["monitorerar"] = "monitors",
+
+        // manages
+        ["administers"] = "manages",
+        ["hanterar"] = "manages",
+        ["forvaltar"] = "manages",
+        ["administrerar"] = "manages",
+
+        // calls
+        ["invokes"] = "calls",
+        ["anropar"] = "calls",
+
+        // owns
+        ["ager"] = "owns",
+
+        // maintains
+        ["underhaller"] = "maintains",
+        ["ansvarar_for"] = "maintains",
     };
 
+    // Inverse aliases: the predicate expresses the relation in the opposite
+    // direction, so subject and object must be SWAPPED when canonicalizing.
+    // (The old code mapped "dependency_of" → "depends_on" without swapping,
+    // which silently reversed the meaning of those triples.)
+    static readonly Dictionary<string, string> InversePredicateAliases = new(StringComparer.Ordinal)
+    {
+        // X dependency_of Y  ⇒  Y depends_on X
+        ["dependency_of"] = "depends_on",
+        ["required_by"] = "depends_on",
+        ["needed_by"] = "depends_on",
+        ["kravs_av"] = "depends_on",
+        ["behovs_av"] = "depends_on",
+
+        // X version_of Y  ⇒  Y has_version X
+        ["version_of"] = "has_version",
+        ["version_av"] = "has_version",
+
+        // X used_by Y  ⇒  Y uses X
+        ["used_by"] = "uses",
+        ["anvands_av"] = "uses",
+
+        // X created Y  ⇒  Y created_by X
+        ["created"] = "created_by",
+        ["developed"] = "created_by",
+        ["built"] = "created_by",
+        ["skapade"] = "created_by",
+        ["utvecklade"] = "created_by",
+        ["byggde"] = "created_by",
+
+        // X hosts Y  ⇒  Y runs_on X
+        ["hosts"] = "runs_on",
+        ["hostar"] = "runs_on",
+        ["driftar"] = "runs_on",
+
+        // X replaced_by Y  ⇒  Y replaces X
+        ["replaced_by"] = "replaces",
+        ["superseded_by"] = "replaces",
+        ["ersatt_av"] = "replaces",
+        ["ersatts_av"] = "replaces",
+
+        // X owned_by Y  ⇒  Y owns X
+        ["owned_by"] = "owns",
+        ["ags_av"] = "owns",
+
+        // X called_by Y  ⇒  Y calls X
+        ["called_by"] = "calls",
+        ["invoked_by"] = "calls",
+        ["anropas_av"] = "calls",
+
+        // X contains Y  ⇒  Y part_of X
+        ["contains"] = "part_of",
+        ["has_part"] = "part_of",
+        ["consists_of"] = "part_of",
+        ["includes"] = "part_of",
+        ["innehaller"] = "part_of",
+        ["bestar_av"] = "part_of",
+        ["inkluderar"] = "part_of",
+
+        // X employs Y  ⇒  Y works_at X
+        ["employs"] = "works_at",
+        ["anstaller"] = "works_at",
+
+        // X managed_by Y  ⇒  Y manages X
+        ["managed_by"] = "manages",
+        ["hanteras_av"] = "manages",
+        ["forvaltas_av"] = "manages",
+
+        // X maintained_by Y  ⇒  Y maintains X
+        ["maintained_by"] = "maintains",
+        ["underhalls_av"] = "maintains",
+
+        // X monitored_by Y  ⇒  Y monitors X
+        ["monitored_by"] = "monitors",
+        ["overvakas_av"] = "monitors",
+    };
+
+    /// <summary>
+    /// The canonical predicate vocabulary. Surface this in the MCP tool
+    /// description for add_triple so agents pick canonical predicates
+    /// directly instead of inventing near-synonyms.
+    /// </summary>
+    public static IReadOnlyList<string> CanonicalPredicates { get; } =
+        PredicateAliases.Values
+            .Concat(InversePredicateAliases.Values)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+    // Canonical entity key: lowercase, strip whitespace/-/_, fold Nordic
+    // diacritics to ASCII (å→a, ö→o, é→e ...), then drop anything left
+    // outside printable ASCII. "Öresundskraft" → "oresundskraft" instead of
+    // the old behavior of deleting non-ASCII chars ("resundskraft").
     static string Canonicalize(string name)
         => NonAsciiRegex().Replace(
-            LowerStripRegex().Replace(name.ToLowerInvariant(), ""), "");
+            TextNormalization.FoldToAscii(
+                LowerStripRegex().Replace(name.ToLowerInvariant(), "")), "");
 
     [GeneratedRegex(@"[^\x20-\x7E]+")]
     private static partial Regex NonAsciiRegex();
@@ -47,10 +285,24 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
     [GeneratedRegex(@"[\s\-_]+")]
     private static partial Regex LowerStripRegex();
 
-    static string CanonicalizePredicate(string predicate)
+    /// <summary>
+    /// Canonicalize a predicate. Returns the canonical predicate and whether
+    /// the alias was an inverse form, in which case the caller must swap
+    /// subject and object to preserve the meaning of the triple.
+    /// </summary>
+    static (string Predicate, bool Swap) CanonicalizePredicate(string predicate)
     {
-        var normalized = PredicateNormalizeRegex().Replace(predicate.ToLowerInvariant(), "_");
-        return PredicateAliases.TryGetValue(normalized, out var canonical) ? canonical : normalized;
+        var normalized = NonAsciiRegex().Replace(
+            TextNormalization.FoldToAscii(
+                PredicateNormalizeRegex().Replace(predicate.Trim().ToLowerInvariant(), "_")), "");
+
+        if (PredicateAliases.TryGetValue(normalized, out var canonical))
+            return (canonical, false);
+
+        if (InversePredicateAliases.TryGetValue(normalized, out var inverse))
+            return (inverse, true);
+
+        return (normalized, false);
     }
 
     [GeneratedRegex(@"[\s\-]+")]
@@ -116,10 +368,16 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         string? sourceRef = null,
         CancellationToken ct = default)
     {
-        // auto-create entities and canonicalize predicate
+        // Canonicalize the predicate first: inverse aliases ("dependency_of",
+        // "ägs_av", "contains", ...) flip the direction, so subject and object
+        // are swapped to store the fact in canonical forward form.
+        var (canonPredicate, swap) = CanonicalizePredicate(predicate);
+        if (swap)
+            (subject, obj) = (obj, subject);
+
+        // auto-create entities
         var subjectId = await EnsureEntityAsync(subject, EntityClassifier.Classify(subject), ct);
         var objectId = await EnsureEntityAsync(obj, EntityClassifier.Classify(obj), ct);
-        var canonPredicate = CanonicalizePredicate(predicate);
 
         var from = validFrom ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var id = TripleId(subjectId, canonPredicate, objectId, from);
@@ -153,8 +411,8 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         var conflict = await CheckConflictAsync(subjectId, subject, canonPredicate, objectId, ct);
 
         if (activityLog is not null)
-            await activityLog.LogAsync("add_triple", null, $"{subject} {predicate} {obj}", null,
-                $"Added triple: {subject} {predicate} {obj}", ct);
+            await activityLog.LogAsync("add_triple", null, $"{subject} {canonPredicate} {obj}", null,
+                $"Added triple: {subject} {canonPredicate} {obj}", ct);
 
         return (id, conflict);
     }
@@ -223,9 +481,14 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         DateOnly? ended = null,
         CancellationToken ct = default)
     {
+        // Same inverse handling as AddTripleAsync, so "X ägs_av Y" invalidates
+        // the stored "Y owns X" triple.
+        var (canonPredicate, swap) = CanonicalizePredicate(predicate);
+        if (swap)
+            (subject, obj) = (obj, subject);
+
         var subjectId = await EnsureEntityAsync(subject, EntityClassifier.Classify(subject), ct);
         var objectId = await EnsureEntityAsync(obj, EntityClassifier.Classify(obj), ct);
-        var canonPredicate = CanonicalizePredicate(predicate);
         var date = (ended ?? DateOnly.FromDateTime(DateTime.UtcNow)).ToString("yyyy-MM-dd");
 
         await dbFactory.ExecuteWriteAsync(async db =>
@@ -498,6 +761,9 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
     /// Extract candidate entity names from a text query by matching against
     /// known entities in the knowledge graph. Longest match first.
     /// Server-side filter pushes matching into SQL instead of loading all entities.
+    /// Accent-insensitive: tokens are ASCII-folded in C# and entity names are
+    /// folded with DuckDB's strip_accents(), so "oresundskraft" matches
+    /// "Öresundskraft" and vice versa.
     /// </summary>
     public async Task<IReadOnlyList<string>> MatchEntitiesInTextAsync(
         string text, int limit, CancellationToken ct)
@@ -506,7 +772,7 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
             return [];
 
         var lowerTokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-            .Select(t => t.ToLowerInvariant())
+            .Select(t => TextNormalization.FoldToAscii(t.ToLowerInvariant()))
             .Where(t => t.Length >= 3)
             .Distinct()
             .ToList();
@@ -517,14 +783,14 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         using var cmd = ro.CreateCommand();
         cmd.CommandText = """
             SELECT id, name FROM entities
-            WHERE list_has($lowerTokens, lower(name))
+            WHERE list_has($lowerTokens, strip_accents(lower(name)))
                OR list_has_any(
                     list_transform(
                         COALESCE(
                             TRY_CAST(json_extract(properties, '$.aliases') AS VARCHAR[]),
                             []
                         ),
-                        x -> lower(x)
+                        x -> strip_accents(lower(x))
                     ),
                     $lowerTokens
                 )
@@ -534,10 +800,11 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         // DuckDB expands = ANY(list_param) via UNNEST, which is not allowed in a scalar
         // WHERE position. Use list_has(list, element) for the name check and
         // list_has_any + list_transform for the aliases check instead.
-        //   list_has($lowerTokens, lower(name)) -- exact match against token set
+        //   list_has($lowerTokens, ...) -- exact match against token set
+        //   strip_accents(lower(...))  -- accent-insensitive compare (matches FoldToAscii)
         //   json_extract + TRY_CAST -- parse aliases JSON array to VARCHAR[]
         //   COALESCE -- treat missing aliases as empty list
-        //   list_transform -- lowercase each alias
+        //   list_transform -- normalize each alias
         //   list_has_any -- check intersection with $lowerTokens
         cmd.Parameters.Add(new DuckDBParameter("lowerTokens", lowerTokens));
         cmd.Parameters.Add(new DuckDBParameter("limit", limit));

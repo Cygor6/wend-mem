@@ -41,21 +41,22 @@ public sealed partial class EntityIndexService
         if (tokens.Count == 0)
             return;
 
+        var rows = string.Join(", ", tokens.Select((_, i) => $"($did, $type{i}, $val{i})"));
         await _dbFactory.ExecuteWriteAsync(async db =>
         {
-            foreach (var (tokenType, tokenValue) in tokens)
+            await using var cmd = db.CreateCommand();
+            cmd.CommandText = $"""
+                INSERT INTO drawer_tokens (drawer_id, token_type, token_value)
+                VALUES {rows}
+                ON CONFLICT (drawer_id, token_type, token_value) DO NOTHING
+                """;
+            cmd.Parameters.Add(new DuckDBParameter("did", drawerId));
+            for (int i = 0; i < tokens.Count; i++)
             {
-                using var cmd = db.CreateCommand();
-                cmd.CommandText = """
-                    INSERT INTO drawer_tokens (drawer_id, token_type, token_value)
-                    VALUES ($did, $type, $value)
-                    ON CONFLICT (drawer_id, token_type, token_value) DO NOTHING
-                    """;
-                cmd.Parameters.Add(new DuckDBParameter("did", drawerId));
-                cmd.Parameters.Add(new DuckDBParameter("type", tokenType));
-                cmd.Parameters.Add(new DuckDBParameter("value", tokenValue));
-                await cmd.ExecuteNonQueryAsync(ct);
+                cmd.Parameters.Add(new DuckDBParameter($"type{i}", tokens[i].Type));
+                cmd.Parameters.Add(new DuckDBParameter($"val{i}", tokens[i].Value));
             }
+            await cmd.ExecuteNonQueryAsync(ct);
         }, ct);
     }
 
@@ -118,9 +119,9 @@ public sealed partial class EntityIndexService
         {
             if (!drawerTokens.TryGetValue(did, out var drawerSet) || drawerSet.Count == 0)
                 continue;
-            int intersection = querySet.Intersect(drawerSet).Count();
-            int union = querySet.Union(drawerSet).Count();
-            if (union > 0 && intersection > 0)
+            int intersection = querySet.Count(drawerSet.Contains);
+            int union = querySet.Count + drawerSet.Count - intersection;
+            if (intersection > 0)
                 result[did] = (float)intersection / union;
         }
         return result;

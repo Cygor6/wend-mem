@@ -994,7 +994,7 @@ sealed class DrawerStorage(DuckDbConnectionFactory dbFactory, IEmbedder embedder
                     SELECT DISTINCT t1.drawer_id, t1.object AS neighbor_id, t1.confidence
                     FROM entities e
                     JOIN triples t1 ON e.id = t1.subject
-                    WHERE lower(e.name) LIKE '%' || $token || '%'
+                    WHERE strip_accents(lower(e.name)) LIKE '%' || strip_accents(lower($token)) || '%'
                       AND t1.valid_to IS NULL
                       AND t1.drawer_id IS NOT NULL
                 ),

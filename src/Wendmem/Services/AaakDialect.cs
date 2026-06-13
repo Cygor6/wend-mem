@@ -24,11 +24,13 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
     private static partial Regex SentenceSplitRegex();
 
     // ── Detection vocabularies (bilingual SV/EN) ───────────────────────────
-    // All matching is substring `Contains` over lowercased text, so stems are
-    // chosen to be distinctive. Avoid bare stems that hide inside common words:
-    //   arg ⊂ argument · sur ⊂ resurs · tack ⊂ kontakt · less ⊂ regardless
-    //   nöjd ⊂ missnöjd (meaning inversion!)
-    // Swedish stems are truncated to catch inflection (orolig→oroligt/oroliga).
+    // Matching is WORD-START anchored (see ContainsStem): a stem only matches
+    // when the preceding character is a non-letter. That kills suffix/infix
+    // false positives (api ⊂ rapid, tack ⊂ kontakt, viktig ⊂ oviktig,
+    // bestämd ⊂ obestämd, nöjd ⊂ missnöjd) while still catching inflection,
+    // since Swedish stems are truncated prefixes (orolig → oroligt/oroliga).
+    // Stems must still not be PREFIXES of common unrelated words:
+    //   arg → argument · sur → surfa/surr · sad → sade/sadel (all excluded)
 
     // Affective signals → emotion code. One entry per code (Take(3) in Compress
     // picks the first three in table order, so order = priority).
@@ -53,8 +55,8 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
         ("fear",     ["fear", "scared", "afraid", "terrified", "dread",
                       "rädd", "rädsla", "skräck", "fruktar", "livrädd"]),
         ("joy",      ["happy", "glad", "pleased", "delighted",
-                      "lycklig", "förtjust"]),
-        ("grief",    ["sad", "disappointed",
+                      "lycklig", "förtjust", "nöjd", "glädje"]),
+        ("grief",    ["sadness", "saddened", "unhappy", "disappointed",
                       "ledsen", "besviken", "nedstämd", "sorgsen"]),
         ("surprise", ["surprised", "shocked", "unexpected", "didn't expect",
                       "förvån", "överrask", "chock", "oväntad"]),
@@ -121,16 +123,34 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
     ];
 
     // Capitalized function words that must not be mistaken for entities.
+    // Swedish/English sentence starters and pronouns dominate the regex hits
+    // otherwise ("Jag", "Vi", "We", ...) and crowd out the Take(3) budget.
     static readonly HashSet<string> StopWords =
         new(StringComparer.OrdinalIgnoreCase)
         {
             // English
-            "The", "This", "That", "Then", "When", "Where", "What", "Why",
-            "How", "And", "But", "For", "With", "From", "Into", "About",
+            "The", "This", "That", "These", "Those", "Then", "When", "Where",
+            "What", "Why", "How", "And", "But", "For", "With", "From", "Into",
+            "About", "We", "You", "He", "She", "It", "They", "My", "Your",
+            "Our", "Their", "His", "Her", "Its", "In", "On", "At", "As", "If",
+            "Is", "Are", "Was", "Were", "Be", "Been", "Do", "Does", "Did",
+            "So", "Or", "An", "Of", "Up", "Out", "Over", "Under", "After",
+            "Before", "While", "Since", "Also", "However", "Therefore",
+            "Maybe", "Perhaps", "Now", "Today", "Yesterday", "Tomorrow",
+            "Here", "There", "Not", "Yes", "No", "All", "Some", "Any",
+            "Each", "Every", "Both", "More", "Most", "Other", "Only",
+            "Even", "Still", "Just", "First", "Next", "Last",
             // Swedish
             "Den", "Det", "De", "Denna", "Detta", "Dessa", "När", "Var",
             "Vart", "Vad", "Varför", "Hur", "Och", "Men", "För", "Med",
             "Från", "Till", "Om", "Som", "Att", "En", "Ett", "Här", "Där",
+            "Jag", "Vi", "Du", "Ni", "Han", "Hon", "Hen", "Man", "Min",
+            "Mitt", "Mina", "Din", "Ditt", "Dina", "Sin", "Sitt", "Sina",
+            "Vår", "Vårt", "Våra", "Er", "Ert", "Era", "Hans", "Hennes",
+            "Nu", "Sedan", "Sen", "Idag", "Igår", "Imorgon", "Även", "Just",
+            "Alla", "Allt", "Ingen", "Inget", "Inga", "Inte", "Bara",
+            "Efter", "Innan", "Eftersom", "Kanske", "Sådan", "Sådant",
+            "Vid", "På", "Av", "Ut", "Upp", "Ner", "Så", "Då", "Ja", "Nej",
         };
 
     // Lowercase words excluded from topic extraction. Only 4+ chars matter —
@@ -144,6 +164,11 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
             "there", "their", "about", "because", "should", "could",
             "into", "when", "where", "what", "using", "used", "uses",
             "then", "than", "they", "them", "your", "our", "the",
+            "which", "while", "after", "before", "really", "like",
+            "more", "most", "some", "only", "also", "been", "being",
+            "does", "doing", "make", "made", "need", "want", "just",
+            "very", "much", "many", "other", "another", "still", "even",
+            "every", "each", "both", "same", "such", "here", "were",
             // Swedish
             "eller", "eftersom", "skulle", "kunde", "kunna", "deras",
             "denna", "detta", "dessa", "borde", "använder", "använda",
@@ -151,6 +176,10 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
             "över", "under", "mellan", "också", "bara", "inte", "vill",
             "ville", "hade", "skall", "samt", "alltså", "därför", "måste",
             "behöver", "finns", "gäller", "alla", "varje",
+            "kommer", "göra", "gjort", "gjorde", "många", "andra", "samma",
+            "redan", "vilket", "vilken", "vilka", "något", "några", "någon",
+            "mycket", "lite", "ganska", "alltid", "aldrig", "ofta", "ibland",
+            "idag", "igår", "imorgon", "helt", "fram", "tillbaka", "igen",
         };
 
     readonly Dictionary<string, string> _codes =
@@ -160,11 +189,14 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
     {
         meta ??= new AaakMetadata();
 
+        // One lowercase pass, shared by topics, emotions and flags.
+        var lower = text.ToLowerInvariant();
+
         var entities = DetectEntities(text).Take(3).ToArray();
-        var topics = ExtractTopics(text).Take(3).ToArray();
+        var topics = ExtractTopics(lower).Take(3).ToArray();
         var quote = ExtractKeySentence(text);
-        var emotions = DetectEmotions(text).Take(3).ToArray();
-        var flags = DetectFlags(text).ToArray();
+        var emotions = DetectEmotions(lower).Take(3).ToArray();
+        var flags = DetectFlags(lower).ToArray();
 
         var lines = new List<string>();
 
@@ -223,8 +255,8 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
                             .Select(char.ToUpperInvariant)
                             .ToArray());
 
-    static IEnumerable<string> ExtractTopics(string text)
-        => TopicRegex().Matches(text.ToLowerInvariant())
+    static IEnumerable<string> ExtractTopics(string lower)
+        => TopicRegex().Matches(lower)
                 .Select(m => m.Value)
                 .Where(w => !CommonWords.Contains(w))
                 .GroupBy(w => w)
@@ -239,12 +271,14 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
             .OrderByDescending(ScoreSentence)
             .FirstOrDefault();
 
-        return best switch
-        {
-            null => "",
-            { Length: <= 140 } => best,
-            _ => $"{best[..137]}...",
-        };
+        if (best is null)
+            return "";
+        if (best.Length <= 140)
+            return best;
+
+        // Don't split a surrogate pair (emoji etc.) at the cut point.
+        var cut = char.IsHighSurrogate(best[136]) ? 136 : 137;
+        return $"{best.AsSpan(0, cut)}...";
     }
 
     static int ScoreSentence(string s)
@@ -252,25 +286,41 @@ public sealed partial class AaakDialect(Dictionary<string, string>? entityCodes 
         var l = s.ToLowerInvariant();
         var score = s.Length;
         foreach (var (weight, stems) in ScoreCues)
-            if (stems.Any(l.Contains))
+            if (stems.Any(stem => ContainsStem(l, stem)))
                 score += weight;
         return score;
     }
 
-    static IEnumerable<string> DetectEmotions(string text)
+    static IEnumerable<string> DetectEmotions(string lower)
     {
-        var lower = text.ToLowerInvariant();
         foreach (var (code, signals) in Emotions)
-            if (signals.Any(lower.Contains))
+            if (signals.Any(stem => ContainsStem(lower, stem)))
                 yield return code;
     }
 
-    static IEnumerable<string> DetectFlags(string text)
+    static IEnumerable<string> DetectFlags(string lower)
     {
-        var lower = text.ToLowerInvariant();
         foreach (var (flag, stems) in Flags)
-            if (stems.Any(lower.Contains))
+            if (stems.Any(stem => ContainsStem(lower, stem)))
                 yield return flag;
+    }
+
+    /// <summary>
+    /// Word-start anchored stem search: the stem must begin at the start of
+    /// the string or be preceded by a non-letter. Stems remain open-ended on
+    /// the right so truncated Swedish stems still catch inflection
+    /// ("orolig" matches "oroliga", but "viktig" no longer matches "oviktig").
+    /// </summary>
+    static bool ContainsStem(string lower, string stem)
+    {
+        int idx = 0;
+        while ((idx = lower.IndexOf(stem, idx, StringComparison.Ordinal)) >= 0)
+        {
+            if (idx == 0 || !char.IsLetter(lower[idx - 1]))
+                return true;
+            idx++;
+        }
+        return false;
     }
 
     static string EscapeQuote(string v)

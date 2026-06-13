@@ -29,7 +29,6 @@ sealed class FileMiner(
         ".vspscc", ".vssscc",
         ".pfx", ".p12", ".pem", ".key", ".snk",
         ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv",
-        ".min.js", ".min.css",
     };
 
     static readonly HashSet<string> SkipDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -82,12 +81,12 @@ sealed class FileMiner(
             return (0, 0, 0);
         }
 
-        foreach (var file in files.Where(f => !IsSkipped(f)))
+        foreach (var file in files.Where(f => !IsSkippedStatic(f)))
         {
             var fileRoom = !string.IsNullOrWhiteSpace(room)
                 ? room
                 : RoomClassifier.Classify(file);
-            var r = await MineFileAsync(file, wing, fileRoom, ct);
+            var r = await MineFileCoreAsync(file, wing, fileRoom, ct);
             processed += r.FilesProcessed;
             added += r.DrawersAdded;
             skipped += r.FilesSkipped;
@@ -110,7 +109,16 @@ sealed class FileMiner(
     public async Task<(int FilesProcessed, int DrawersAdded, int FilesSkipped, List<string> NewDrawerIds)>
         MineFileAsync(string filePath, string wing, string? room, CancellationToken ct)
     {
-        if (IsSkipped(filePath))
+        var result = await MineFileCoreAsync(filePath, wing, room, ct);
+        if (result.DrawersAdded > 0)
+            await storage.RebuildFtsIndexAsync(ct);
+        return result;
+    }
+
+    async Task<(int FilesProcessed, int DrawersAdded, int FilesSkipped, List<string> NewDrawerIds)>
+        MineFileCoreAsync(string filePath, string wing, string? room, CancellationToken ct)
+    {
+        if (IsSkippedStatic(filePath))
             return (0, 0, 1, []);
 
         string text;
@@ -177,23 +185,7 @@ sealed class FileMiner(
             newIds.Add(id);
         }
 
-        if (added > 0)
-            await storage.RebuildFtsIndexAsync(ct);
-
         return (1, added, 0, newIds);
-    }
-    bool IsSkipped(string path)
-    {
-        var name = Path.GetFileName(path);
-        var ext = Path.GetExtension(path);
-        if (SkipFiles.Contains(name))
-            return true;
-        if (SkipExtensions.Contains(ext))
-            return true;
-        if (path.Split(Path.DirectorySeparatorChar)
-                .Any(seg => SkipDirectories.Contains(seg)))
-            return true;
-        return SkipFileNameSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
     }
 
     public static bool IsSkippedStatic(string path)
@@ -208,12 +200,6 @@ sealed class FileMiner(
                 .Any(seg => SkipDirectories.Contains(seg)))
             return true;
         return SkipFileNameSuffixes.Any(s => name.EndsWith(s, StringComparison.OrdinalIgnoreCase));
-    }
-
-    static string InferRoom(string file, string root)
-    {
-        var rel = Path.GetRelativePath(root, Path.GetDirectoryName(file) ?? root);
-        return rel == "." ? "root" : rel.Replace(Path.DirectorySeparatorChar, '/');
     }
 
     static string ShortHash(string input) =>

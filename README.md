@@ -309,6 +309,8 @@ wendmem grep-exact <pattern>                   # Exact string or regex search
 wendmem graph --wing W [--output path]          # Generate interactive HTML knowledge graph
 ```
 
+![wendmem graph output](docs/graph.webp)
+
 The full command set (episodes, skills, reflection, knowledge-graph resolution, salience rescoring, …) is documented in [`documentation/06-cli-commands.md`](documentation/06-cli-commands.md).
 
 ---

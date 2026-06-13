@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Numerics.Tensors;
+using System.Text.Json;
 using DuckDB.NET.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -10,6 +11,7 @@ namespace Wendmem.Storage;
 
 sealed class KgResolver(
     DuckDbConnectionFactory dbFactory,
+    KnowledgeGraph kg,
     IEmbedder embedder,
     IConfiguration config,
     LlmService llm,
@@ -24,6 +26,7 @@ sealed class KgResolver(
         var (entitiesMerged, triplesRedirected) = await ResolveEntitiesAsync(wing, ct);
         var predicatesNormalized = await NormalizePredicatesAsync(wing, ct);
         var confidenceUpdated = await UpdateConfidenceAsync(wing, ct);
+
         return new KgResolveResult(entitiesMerged, triplesRedirected, predicatesNormalized, confidenceUpdated.Merged, confidenceUpdated.MinConf, confidenceUpdated.MaxConf);
     }
 
@@ -44,7 +47,9 @@ sealed class KgResolver(
             if (canonical is null || aliases.Count == 0)
                 continue;
 
-            var canonicalItem = group.First(g => g.Name.Equals(canonical, StringComparison.OrdinalIgnoreCase));
+            var canonicalItem = group.FirstOrDefault(g => g.Name.Equals(canonical, StringComparison.OrdinalIgnoreCase));
+            if (canonicalItem.Id is null)
+                continue; // LLM invented a canonical name not in the group
             var aliasItems = group.Where(g => aliases.Contains(g.Name, StringComparer.OrdinalIgnoreCase)).ToList();
             aliasItems = aliasItems.Where(a => a.Id != canonicalItem.Id).ToList();
             if (aliasItems.Count == 0)
@@ -90,11 +95,17 @@ sealed class KgResolver(
     }
 
     // Fix: mark i as assigned immediately when it becomes a group anchor.
+    // Norms are precomputed once instead of twice per pair — the pairwise loop
+    // is O(n²) over 512-dim vectors, so this and TensorPrimitives matter.
     public async Task<List<List<(string Id, string Name, float[] Embedding)>>>
         FindCandidateGroupsAsync(
             IReadOnlyList<(string Id, string Name, float[] Embedding)> items,
             float threshold, CancellationToken ct)
     {
+        var norms = new float[items.Count];
+        for (int k = 0; k < items.Count; k++)
+            norms[k] = TensorPrimitives.Norm(items[k].Embedding);
+
         var groups = new List<List<(string Id, string Name, float[] Embedding)>>();
         var assigned = new HashSet<int>();
 
@@ -111,7 +122,10 @@ sealed class KgResolver(
             {
                 if (j == i || assigned.Contains(j))
                     continue;
-                float score = CosineSimilarity(items[i].Embedding, items[j].Embedding);
+                float denom = norms[i] * norms[j];
+                float score = denom < 1e-9f
+                    ? 0f
+                    : TensorPrimitives.Dot(items[i].Embedding, items[j].Embedding) / denom;
                 if (score >= threshold)
                     similarities.Add((j, score));
             }
@@ -132,9 +146,16 @@ sealed class KgResolver(
     async Task<(string? Canonical, List<string> Aliases)> ConfirmWithLlmAsync(
         List<string> candidateNames, string wing, string itemType, CancellationToken ct)
     {
+        // Steer predicate normalization toward the same canonical vocabulary
+        // that AddTripleAsync's alias tables target, so resolver output doesn't
+        // drift away from it.
+        var canonicalVocabulary = string.Join(", ", KnowledgeGraph.CanonicalPredicates);
+
         var systemPrompt = itemType == "entity"
             ? "You are a knowledge graph curator. Identify which of these entity names refer to the exact same real-world entity. Consider abbreviations, casing, version suffixes, and aliases. Respond ONLY with valid JSON, no markdown, no preamble."
-            : "You are a knowledge graph curator. Identify which of these predicate strings express the exact same directed relationship. \"uses\" and \"is used by\" are NOT the same - direction matters. Respond ONLY with valid JSON, no markdown, no preamble.";
+            : "You are a knowledge graph curator. Identify which of these predicate strings express the exact same directed relationship. \"uses\" and \"is used by\" are NOT the same - direction matters. " +
+              $"When one of these canonical predicates fits, prefer it as the canonical form: {canonicalVocabulary}. " +
+              "Respond ONLY with valid JSON, no markdown, no preamble.";
 
         var label = itemType == "entity" ? "Entities" : "Predicates";
         var namesJson = JsonSerializer.Serialize(candidateNames, WendmemJsonContext.Default.ListString);
@@ -368,19 +389,6 @@ sealed class KgResolver(
         }
 
         return (updated, minConf, maxConf);
-    }
-
-    static float CosineSimilarity(float[] a, float[] b)
-    {
-        float dot = 0, magA = 0, magB = 0;
-        for (int i = 0; i < a.Length; i++)
-        {
-            dot += a[i] * b[i];
-            magA += a[i] * a[i];
-            magB += b[i] * b[i];
-        }
-        var denom = MathF.Sqrt(magA) * MathF.Sqrt(magB);
-        return denom == 0 ? 0 : dot / denom;
     }
 }
 

@@ -5,17 +5,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Wendmem.Storage;
 
-public sealed class ReflectionDraftStorage
+public sealed class ReflectionDraftStorage(
+    DuckDbConnectionFactory dbFactory,
+    ILogger<ReflectionDraftStorage> logger)
 {
-    readonly DuckDbConnectionFactory _dbFactory;
-    readonly ILogger<ReflectionDraftStorage> _logger;
-
-    public ReflectionDraftStorage(DuckDbConnectionFactory dbFactory, ILogger<ReflectionDraftStorage> logger)
-    {
-        _dbFactory = dbFactory;
-        _logger = logger;
-    }
-
     public async Task<ReflectionDraft> SaveDraftAsync(
         string wing, string question, string suggestedPath,
         string suggestedTitle, string draftContent, string citations,
@@ -26,7 +19,7 @@ public sealed class ReflectionDraftStorage
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
         var id = Convert.ToHexString(hash[..8]).ToLowerInvariant();
 
-        await _dbFactory.ExecuteWriteAsync(async db =>
+        await dbFactory.ExecuteWriteAsync(async db =>
         {
             using var cmd = db.CreateCommand();
             cmd.CommandText = """
@@ -45,14 +38,14 @@ public sealed class ReflectionDraftStorage
             await cmd.ExecuteNonQueryAsync(ct);
         }, ct);
 
-        _logger.LogInformation("Saved reflection draft {Id} wing={Wing}", id, wing);
+        logger.LogInformation("Saved reflection draft {Id} wing={Wing}", id, wing);
         return new ReflectionDraft(id, wing, question, suggestedPath, suggestedTitle,
             draftContent, citations, ts, "pending");
     }
 
     public async Task<List<ReflectionDraft>> ListPendingAsync(string wing, int limit, CancellationToken ct)
     {
-        using var ro = _dbFactory.OpenReadOnly();
+        using var ro = dbFactory.OpenReadOnly();
         using var cmd = ro.CreateCommand();
         cmd.CommandText = """
             SELECT id, wing, question, suggested_path, suggested_title,
@@ -72,9 +65,38 @@ public sealed class ReflectionDraftStorage
         return results;
     }
 
+    /// <summary>
+    /// Distinct questions previously asked for a wing, most recent first.
+    /// Used by the reflection dedup guard. Deliberately includes ALL statuses:
+    /// a rejected draft should also block re-asking — otherwise the next
+    /// reflection regenerates exactly what the user just said no to.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> RecentQuestionsAsync(
+        string wing, int limit, CancellationToken ct)
+    {
+        using var ro = dbFactory.OpenReadOnly();
+        using var cmd = ro.CreateCommand();
+        cmd.CommandText = """
+            SELECT question
+            FROM reflection_drafts
+            WHERE wing = $wing
+            GROUP BY question
+            ORDER BY max(created_at) DESC
+            LIMIT $limit
+            """;
+        cmd.Parameters.Add(new DuckDBParameter("wing", wing));
+        cmd.Parameters.Add(new DuckDBParameter("limit", limit));
+
+        var list = new List<string>();
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+            list.Add(reader.GetString(0));
+        return list;
+    }
+
     public async Task<ReflectionDraft?> GetByIdAsync(string id, CancellationToken ct)
     {
-        using var ro = _dbFactory.OpenReadOnly();
+        using var ro = dbFactory.OpenReadOnly();
         using var cmd = ro.CreateCommand();
         cmd.CommandText = """
             SELECT id, wing, question, suggested_path, suggested_title,
@@ -82,6 +104,7 @@ public sealed class ReflectionDraftStorage
             FROM reflection_drafts WHERE id = $id
             """;
         cmd.Parameters.Add(new DuckDBParameter("id", id));
+
         using var reader = await Task.Run(() => cmd.ExecuteReader(), ct);
         return reader.Read() ? ReadDraft(reader) : null;
     }
@@ -89,7 +112,7 @@ public sealed class ReflectionDraftStorage
     public async Task<bool> UpdateStatusAsync(string id, string status, CancellationToken ct)
     {
         var affected = 0;
-        await _dbFactory.ExecuteWriteAsync(async db =>
+        await dbFactory.ExecuteWriteAsync(async db =>
         {
             using var cmd = db.CreateCommand();
             cmd.CommandText = "UPDATE reflection_drafts SET status = $status WHERE id = $id";

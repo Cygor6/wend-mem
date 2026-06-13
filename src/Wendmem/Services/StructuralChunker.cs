@@ -1,16 +1,28 @@
 ﻿namespace Wendmem.Services;
 
 /// <summary>
-/// Topic-shift chunking. Replaces fixed-size chunking with
-/// boundary detection at semantic shift points (headings, blank lines,
-/// class/function definitions, topic-word changes).
+/// Structural text chunking. Replaces fixed-size chunking with
+/// boundary detection at semantic shift points (headings, paragraph breaks,
+/// class/function definitions, section dividers).
+///
+/// Two modes with separate budgets:
+///  - Char mode: TargetSize/Min/MaxChunkSize.
+///  - Token mode: TargetTokens/Min/MaxTokens, with char ceilings DERIVED from
+///    the token constants (≈4 chars/token for sv/en text, with slack) so the
+///    token budget is actually reachable. The old version reused the char-mode
+///    MaxChunkSize (1200 chars ≈ 300 tokens), which made TargetTokens=512 and
+///    MaxTokens=1024 unreachable.
 /// </summary>
-static class TopicShiftChunker
+static class StructuralChunker
 {
     // Char-based defaults (used when no embedder is available)
     const int TargetSize = 800;
     const int MinChunkSize = 200;
     const int MaxChunkSize = 1200;
+
+    // NOTE: TargetSize + LookaheadWindow == MaxChunkSize with current values.
+    // The lookahead break and the max break therefore coincide; if you change
+    // any of the three, be aware they become independent limits.
     const int LookaheadWindow = 400;
 
     // Token-based defaults
@@ -18,8 +30,15 @@ static class TopicShiftChunker
     const int MinTokens = 64;
     const int MaxTokens = 1024;
 
+    // Derived char ceilings for token mode. ~4 chars/token holds roughly for
+    // both Swedish and English with multilingual BPE tokenizers; the *5 ceiling
+    // adds slack and real token counts always have the final say.
+    const int TokenModeTargetChars = TargetTokens * 4;   // 2048
+    const int TokenModeMaxChars = MaxTokens * 5;         // 5120
+    const int TokenModeMinChars = 50;                    // hard char floor
+
     /// <summary>
-    /// Split text into chunks at topic-shift boundaries (char-based).
+    /// Split text into chunks at Structural boundaries (char-based).
     /// Falls back to fixed-window chunking when no shift signals are found.
     /// </summary>
     internal static List<string> Chunk(string text)
@@ -40,17 +59,20 @@ static class TopicShiftChunker
 
         while (start < text.Length)
         {
-            int cut = FindNextCut(text, start, boundaries, ref boundaryIdx);
-
-            if (text.Length - start <= MaxChunkSize && chunks.Count > 0)
+            if (chunks.Count > 0 && text.Length - start <= MaxChunkSize)
             {
                 chunks.Add(text[start..].TrimEnd());
                 break;
             }
 
+            int cut = FindNextCut(text, start, boundaries, ref boundaryIdx);
+
             var chunk = text[start..cut].TrimEnd();
             if (chunk.Length > 0)
                 chunks.Add(chunk);
+
+            if (cut >= text.Length)
+                break;
 
             start = cut;
             while (start < text.Length && char.IsWhiteSpace(text[start]))
@@ -63,27 +85,23 @@ static class TopicShiftChunker
     }
 
     /// <summary>
-    /// Split text into chunks at topic-shift boundaries (token-aware).
-    /// Uses the embedder's tokenizer to enforce token-based size limits.
-    /// Falls back to char-based heuristic chunking when no embedder is provided.
+    /// Split text into chunks at Structural boundaries (token-aware).
+    /// Uses the embedder's tokenizer to enforce the token budget; char limits
+    /// derived from the token constants are only used as scan ceilings.
     /// </summary>
     internal static List<string> Chunk(string text, IEmbedder embedder)
     {
         if (string.IsNullOrWhiteSpace(text))
             return [];
 
-        int minT = Math.Max(16, MinTokens);
-        int maxT = Math.Max(minT + 32, MaxTokens);
-        int minC = Math.Max(50, MinChunkSize);
-        int maxC = Math.Max(minC + 100, MaxChunkSize);
-
-        if (text.Length <= minC)
+        // ≈ TargetTokens or less for sv/en text — no tokenizer call needed.
+        if (text.Length <= TargetTokens * 3)
             return [text];
 
         var boundaries = FindShiftBoundaries(text);
 
         if (boundaries.Count == 0)
-            return FixedWindowChunkTokenAware(text, embedder, maxT, minT, maxC, minC);
+            return FixedWindowChunkTokenAware(text, embedder);
 
         var chunks = new List<string>();
         int start = 0;
@@ -91,24 +109,30 @@ static class TopicShiftChunker
 
         while (start < text.Length)
         {
-            int cut = FindNextCutTokenAware(text, start, boundaries, ref boundaryIdx, embedder, maxT, minT, maxC);
-
-            if (text.Length - start <= maxC && chunks.Count > 0)
+            int rest = text.Length - start;
+            if (chunks.Count > 0 && rest <= TokenModeMaxChars
+                && (rest <= TargetTokens * 3
+                    || embedder.CountTokens(text[start..]) <= MaxTokens))
             {
                 chunks.Add(text[start..].TrimEnd());
                 break;
             }
 
+            int cut = FindNextCutTokenAware(text, start, boundaries, ref boundaryIdx, embedder);
+
             var chunk = text[start..cut].TrimEnd();
             if (chunk.Length > 0)
                 chunks.Add(chunk);
+
+            if (cut >= text.Length)
+                break;
 
             start = cut;
             while (start < text.Length && char.IsWhiteSpace(text[start]))
                 start++;
         }
 
-        MergeUndersizedTrailingChunks(chunks, embedder.CountTokens, minT);
+        MergeUndersizedTrailingChunks(chunks, embedder.CountTokens, MinTokens);
 
         return chunks;
     }
@@ -129,17 +153,14 @@ static class TopicShiftChunker
 
             if (line.StartsWith('#') && line.Length > 1 && line[1] is ' ' or '#')
                 boundaries.Add(lineStart);
-            else if (StartsWithKeyword(line, "namespace ", "public class ", "internal class ",
-                "public sealed class ", "public record ", "internal sealed class ",
-                "public struct ", "public interface ", "public enum ",
-                "internal record ", "private class ", "static class "))
+            else if (IsTypeOrNamespaceDeclaration(line))
                 boundaries.Add(lineStart);
             else if (line.StartsWith("#region", StringComparison.OrdinalIgnoreCase))
                 boundaries.Add(lineStart);
-            else if (StartsWithKeyword(line, "def ", "class ", "fn ", "func ", "pub fn ", "pub struct ", "impl "))
+            else if (StartsWithKeyword(line, "def ", "fn ", "func ", "pub fn ", "pub struct ", "impl "))
                 boundaries.Add(lineStart);
-            else if (line.Length == 0 && i > 0 && lines[i - 1].Trim().Length == 0 && i + 1 < lines.Length && lines[i + 1].Trim().Length > 0)
-                boundaries.Add(lineStart);
+            else if (line.Length == 0 && i > 0 && i + 1 < lines.Length && lines[i + 1].Trim().Length > 0)
+                boundaries.Add(lineStart); // paragraph break (single OR last-of-many blank lines)
             else if (IsSectionDivider(line))
                 boundaries.Add(lineStart);
 
@@ -149,16 +170,57 @@ static class TopicShiftChunker
         return boundaries;
     }
 
+    // Leading modifiers stripped before checking for a type/namespace keyword,
+    // so "public sealed partial class", "file record struct" etc. all count —
+    // not just the exact combinations of a hardcoded list.
+    static readonly string[] DeclarationModifiers =
+    [
+        "public ", "internal ", "private ", "protected ", "static ",
+        "sealed ", "abstract ", "partial ", "file ", "readonly ", "ref ", "new ",
+    ];
+
+    static readonly string[] DeclarationKeywords =
+    [
+        "namespace ", "class ", "record ", "struct ", "interface ", "enum ",
+    ];
+
+    static bool IsTypeOrNamespaceDeclaration(string line)
+    {
+        var s = line.AsSpan();
+        bool stripped = true;
+        while (stripped)
+        {
+            stripped = false;
+            foreach (var m in DeclarationModifiers)
+            {
+                if (s.StartsWith(m, StringComparison.Ordinal))
+                {
+                    s = s[m.Length..].TrimStart();
+                    stripped = true;
+                }
+            }
+        }
+
+        foreach (var kw in DeclarationKeywords)
+        {
+            if (s.StartsWith(kw, StringComparison.Ordinal))
+                return true;
+        }
+        return false;
+    }
+
     static int FindNextCut(string text, int start, List<int> boundaries, ref int boundaryIdx)
     {
-        int endEstimate = Math.Min(start + TargetSize, text.Length);
-
         if (text.Length - start <= MaxChunkSize)
             return text.Length;
 
+        // Skip boundaries we've already passed (sentence-cut fallbacks land
+        // between boundaries, so the index can lag behind start).
+        while (boundaryIdx < boundaries.Count && boundaries[boundaryIdx] <= start)
+            boundaryIdx++;
+
         int bestCut = -1;
         int bestDist = int.MaxValue;
-        int sentenceCut = FindSentenceBoundary(text, start, endEstimate);
 
         for (int i = boundaryIdx; i < boundaries.Count; i++)
         {
@@ -189,6 +251,7 @@ static class TopicShiftChunker
             return bestCut;
         }
 
+        int sentenceCut = FindSentenceBoundary(text, start, Math.Min(start + TargetSize, text.Length));
         if (sentenceCut > start + MinChunkSize)
             return sentenceCut;
 
@@ -196,38 +259,48 @@ static class TopicShiftChunker
     }
 
     static int FindNextCutTokenAware(string text, int start, List<int> boundaries,
-        ref int boundaryIdx, IEmbedder embedder, int maxTokens, int minTokens, int maxChars)
+        ref int boundaryIdx, IEmbedder embedder)
     {
-        if (text.Length - start <= maxChars)
-            return text.Length;
+        while (boundaryIdx < boundaries.Count && boundaries[boundaryIdx] <= start)
+            boundaryIdx++;
 
         int bestCut = -1;
         int bestDeviation = int.MaxValue;
+
+        // Incremental token counting: each inter-boundary segment is tokenized
+        // once per cut search instead of re-tokenizing the whole growing prefix
+        // for every candidate (which was O(n²) on boundary-dense code files).
+        // BPE counts aren't perfectly additive across segment seams (±1 token
+        // per join) — more than precise enough for sizing decisions.
+        int segStart = start;
+        int runningTokens = 0;
 
         for (int i = boundaryIdx; i < boundaries.Count; i++)
         {
             int b = boundaries[i];
             int dist = b - start;
 
-            if (dist < 50)
-                continue; // hard char floor
-            if (dist > maxChars)
+            if (dist > TokenModeMaxChars)
                 break;
 
-            int tokens = embedder.CountTokens(text[start..b]);
-            if (tokens < minTokens)
+            runningTokens += embedder.CountTokens(text[segStart..b]);
+            segStart = b;
+
+            if (dist < TokenModeMinChars)
                 continue;
-            if (tokens > maxTokens)
+            if (runningTokens < MinTokens)
+                continue;
+            if (runningTokens > MaxTokens)
                 break;
 
-            int deviation = Math.Abs(tokens - TargetTokens);
+            int deviation = Math.Abs(runningTokens - TargetTokens);
             if (deviation < bestDeviation)
             {
                 bestDeviation = deviation;
                 bestCut = b;
             }
 
-            if (tokens > TargetTokens + 256)
+            if (runningTokens > TargetTokens + 256)
                 break;
         }
 
@@ -239,17 +312,19 @@ static class TopicShiftChunker
             return bestCut;
         }
 
-        // Fallback to sentence boundary, respecting token cap
-        int charEstimate = Math.Min(start + maxTokens * 4, start + maxChars);
-        int sentenceCut = FindSentenceBoundary(text, start, Math.Min(charEstimate, text.Length));
-        if (sentenceCut > start + 50)
+        // Fallback to sentence boundary near the token target.
+        int charEstimate = Math.Min(start + TokenModeTargetChars, text.Length);
+        int sentenceCut = FindSentenceBoundary(text, start, charEstimate);
+        if (sentenceCut > start + TokenModeMinChars)
         {
             int tokens = embedder.CountTokens(text[start..sentenceCut]);
-            if (tokens >= minTokens && tokens <= maxTokens)
+            if (tokens >= MinTokens && tokens <= MaxTokens)
                 return sentenceCut;
         }
 
-        return Math.Min(start + maxChars, text.Length);
+        // Last resort: cut at the target-equivalent char distance, which stays
+        // within the token budget (unlike TokenModeMaxChars, which would not).
+        return Math.Min(start + TokenModeTargetChars, text.Length);
     }
 
     static int FindSentenceBoundary(string text, int start, int end)
@@ -346,41 +421,40 @@ static class TopicShiftChunker
         return chunks;
     }
 
-    static List<string> FixedWindowChunkTokenAware(string text, IEmbedder embedder,
-        int maxTokens, int minTokens, int maxChars, int minChars)
+    static List<string> FixedWindowChunkTokenAware(string text, IEmbedder embedder)
     {
         var chunks = new List<string>();
         int start = 0;
 
         while (start < text.Length)
         {
-            if (text.Length - start <= maxChars)
+            if (text.Length - start <= TokenModeTargetChars)
             {
                 chunks.Add(text[start..].TrimEnd());
                 break;
             }
 
-            int charEstimate = Math.Min(start + maxTokens * 4, start + maxChars);
-            int cut = FindSentenceBoundary(text, start, Math.Min(charEstimate, text.Length));
+            int charEstimate = Math.Min(start + TokenModeTargetChars, text.Length);
+            int cut = FindSentenceBoundary(text, start, charEstimate);
 
             int tokens = embedder.CountTokens(text[start..cut]);
-            if (tokens > maxTokens)
+            if (tokens > MaxTokens)
             {
                 // Shrink: walk backward by sentence boundaries
-                while (cut > start + minChars && tokens > maxTokens)
+                while (cut > start + MinChunkSize && tokens > MaxTokens)
                 {
                     cut = FindSentenceBoundary(text, start, cut - 1);
                     if (cut <= start)
-                    { cut = start + minChars; break; }
+                    { cut = start + MinChunkSize; break; }
                     tokens = embedder.CountTokens(text[start..cut]);
                 }
             }
 
-            if (tokens < minTokens && cut < text.Length)
+            if (tokens < MinTokens && cut < text.Length)
             {
                 // Extend: walk forward by sentence boundaries
-                int limit = Math.Min(text.Length, start + maxChars);
-                while (cut < limit && tokens < minTokens)
+                int limit = Math.Min(text.Length, start + TokenModeMaxChars);
+                while (cut < limit && tokens < MinTokens)
                 {
                     int next = cut;
                     for (int i = cut; i < limit; i++)
@@ -404,7 +478,7 @@ static class TopicShiftChunker
                 start++;
         }
 
-        MergeUndersizedTrailingChunks(chunks, embedder.CountTokens, minTokens);
+        MergeUndersizedTrailingChunks(chunks, embedder.CountTokens, MinTokens);
 
         return chunks;
     }

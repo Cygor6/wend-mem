@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Wendmem.Cli.Commands;
 using Wendmem.Models;
 using Wendmem.Storage;
