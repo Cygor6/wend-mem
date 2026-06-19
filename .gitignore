@@ -39,3 +39,4 @@ publish/
 models/embeddinggemma
 test_bug1
 nul
+.zed/

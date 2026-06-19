@@ -256,28 +256,59 @@ SearchMemories("storage architecture")
 
 ## 5. Storage Protocol
 
-After every meaningful exchange, run this check:
+**Memory holds durable knowledge. The live code is the source of truth for code.**
+
+A project has two kinds of truth, and they belong in different places:
+
+- *What the code does right now* lives in the source. It changes constantly, edited by many hands — your changes are one snapshot among many, already going stale the moment someone else commits. A future agent recovers this on demand with `GrepExact` / `SearchMemories` against the current source. **Never copy it into memory.**
+- *Why the code is shaped this way* — the rule it enforces, the decision behind it, the constraint it must respect — the source cannot express, and it survives refactoring. This is what compounds across sessions. **This is what memory is for.**
+
+A memory that surfaces next session must read as an explanation that helps an agent *understand a concept or a decision* — enough to then reason about whatever code or other work it faces. It must never read as a record of what one person typed into one file.
+
+### The two-question gate — run before every store
+
+1. **Durable?** "If this code is refactored next week, is the memory still true?"
+   - Captures a decision, rule, constraint, rationale, or behavioral contract → **yes** → continue.
+   - Captures a specific edit, line, or current implementation detail → **no** → **discard.**
+2. **Not already in the code?** "Could a future agent recover this by grepping the live source?"
+   - **Yes** → **discard** — let them grep; memory must not duplicate code.
+   - **No** → continue.
+
+Only content that passes **both** is eligible. Then route by type:
 
 ```
-User stated a fact, preference, constraint, or decision?
-  └─ In WakeUp or recent results already?
+Durable fact, rule, constraint, decision, or rationale the user stated or confirmed?
+  └─ Already in WakeUp or recent results?
        └─ NO  → AddMemory (+ source if known)
        └─ YES → skip
 
 Reasoned across sources to a durable conclusion?
   └─ YES → WikiWrite (after Distill, with real citation IDs)
 
-Confirmed a named relationship between entities?
+Confirmed a named, lasting relationship between entities?
   └─ YES → AddTriple (+ InvalidateTriple if replacing old fact)
 
 Completed a non-trivial task (success OR failure)?
-  └─ YES → RecordEpisode (before Distill)
+  └─ YES → RecordEpisode — the lesson, not the diff (before Distill)
 ```
 
-**Quality gate — all three required before storing:**
-1. Verifiably true from direct observation or explicit user confirmation
-2. Non-obvious to a future agent starting cold
-3. Specific enough to be retrievable
+### Store vs. discard — by example
+
+| Discard — ephemeral code snapshot | Store instead — durable knowledge |
+|---|---|
+| "Added `if (qty == 0) skip;` in PickService.cs line 142" | "WMS treats zero-quantity pick lines as cancellations, not errors — they skip silently (ops rule)" |
+| "Refactored DrawerStorage to pool connections" | "DuckDB skips the shutdown CHECKPOINT under connection pooling — call CHECKPOINT explicitly or risk WAL loss" |
+| "Lowered the high-confidence threshold to 0.78 in palace-config.json" | "Confidence thresholds are corpus-specific, set per wing by `calibrate` — recalibrate when retrieval degrades, never hardcode a global value" |
+| "Implemented the FindSkills tool today" | "Skills are read-only over MCP by design — registration stays CLI-only to hold the agent surface at 17 tools" |
+| A list of the files I touched this session | (put the transferable lesson in RecordEpisode `next_time` — the diff is already in version control) |
+
+The pattern: store the **why** and the **rule**, never the **where-in-code**. If a sentence only makes sense while pointing at a current line of a current file, it does not belong in memory.
+
+### Quality gate — all four required before storing
+1. **Durable** — survives a refactor (the two-question gate above). For this corpus this is the filter that matters most: code churns, many people edit it, and your latest edits are not authoritative next session.
+2. **True** — from direct observation or explicit user confirmation.
+3. **Non-obvious** — a future agent starting cold would not already know it.
+4. **Self-contained** — readable without the surrounding session, specific enough to retrieve.
 
 **Timing:**
 - `AddMemory`, `AddTriple` — immediately when confirmed
@@ -301,6 +332,11 @@ Completed a non-trivial task (success OR failure)?
 
 `what_failed` and `next_time` are the most valuable fields. Be specific.
 Name tools, patterns, files, and exact error messages.
+
+Capture the *transferable lesson* — why an approach worked or failed — not a
+line-by-line changelog of edits. The diff lives in version control; the judgment
+is what compounds. Naming a file as *where a lesson applies* is fine; recording
+*what you changed inside it* is not.
 
 ### When RecordEpisode references skills
 
@@ -347,7 +383,7 @@ not via MCP. The agent does not register, update, or remove skills.
 - [ ] Before project-specific assumption → search (Section 4)
 - [ ] Exact symbol/identifier → `GrepExact`; concept → `SearchMemories`
 - [ ] Chain searches when results reveal new terms
-- [ ] `AddMemory` / `AddTriple` immediately when user confirms a fact
+- [ ] `AddMemory` / `AddTriple` immediately when the user confirms a *durable* fact — first run the two-question gate (Section 5); never store code-edit snapshots
 
 **End — session is complete when ALL are true:**
 - [ ] User's question has a grounded answer with cited drawer IDs
@@ -388,6 +424,10 @@ not via MCP. The agent does not register, update, or remove skills.
 - Always pass `wing: "work"` — omitting wing degrades relevance significantly and risks cross-wing contamination. Using any other wing value is a protocol violation.
 
 **Storage:**
+- `AddMemory` does **not** filter for staleness — its dedup check catches only exact
+  content repeats, never code-snapshot drawers that go stale within days. The
+  two-question gate (Section 5) is the only thing standing between memory and rot —
+  self-enforce it. Store decisions, rules, and rationale; discard edit snapshots.
 - `WikiWrite` with `citations=""` silently succeeds — never omit real drawer IDs
 - `InvalidateTriple` without a following `AddTriple` leaves a gap — always
   record current truth when retiring a fact

@@ -24,7 +24,7 @@
     <PackageReference Include="ModelContextProtocol" Version="*" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="*" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="*" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.27.0" />
     <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0" />
     <PackageReference Include="OpenAI" Version="2.11.0" />
   </ItemGroup>
