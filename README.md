@@ -325,6 +325,25 @@ The LLM backend lives in `src/Wendmem/appsettings.json` under the `Llm` section.
 | **Ollama** | `Ollama` | `http://localhost:11434/v1/` | placeholder `"ollama"` |
 | **llama.cpp** | `LlamaCpp` | `http://localhost:8080/v1/` | placeholder `"llamacpp"` |
 
+### Reasoning / thinking models
+
+Reasoning models (GLM-5, Qwen3, DeepSeek-R1) spend output tokens on an internal
+`reasoning_content` pass. For wend-mem's extraction/classification work (entity typing, memory
+distillation, validation, reflection) that pass only wastes the token budget and can return
+empty answers, so a "disable thinking" parameter is attached to every LLM call. It is
+configurable per provider via `DisableThinkingJson` because different models behind the same
+provider need different parameter shapes:
+
+| Provider | `DisableThinkingJson` (default) |
+|----------|----------------------------------|
+| **z.ai** (GLM) | `{"thinking":{"type":"disabled"}}` |
+| **Ollama** (Gemma3/Qwen3) | `{"think":false}` |
+| **llama.cpp** (Qwen3) | `{"chat_template_kwargs":{"enable_thinking":false}}` |
+
+When `DisableThinkingJson` is blank or unparseable, a built-in default per provider is used
+(z.ai and Ollama ship with the values above; llama.cpp ships empty, so set it for a reasoning
+model). The value is a raw JSON object string, so any model-specific shape can be expressed.
+
 Retrieval, ranking, chunking, admission control, and WakeUp behaviour are all configurable under the `Palace` section. See [`documentation/configuration.md`](documentation/configuration.md) for the full reference.
 
 ---

@@ -14,18 +14,26 @@ namespace Wendmem.Experiences;
 public sealed class LlmService : IDisposable
 {
     readonly IChatClient _chat;
+    // Additional request properties (e.g. thinking-disabled) attached to every completion,
+    // or null when none apply. Resolved once at construction from the active provider config.
+    readonly AdditionalPropertiesDictionary? _disableThinking;
 
     public string ModelName { get; }
 
-    public LlmService(IChatClient chat, string modelName)
+    public LlmService(IChatClient chat, string modelName, AdditionalPropertiesDictionary? disableThinking = null)
     {
         _chat = chat;
         ModelName = modelName;
+        _disableThinking = disableThinking;
     }
 
     public async Task<string> CompleteAsync(string prompt, CancellationToken ct)
     {
-        var response = await _chat.GetResponseAsync(prompt, cancellationToken: ct);
+        // Only build ChatOptions when there's something to attach, so callers that don't need
+        // thinking control (e.g. a non-reasoning model) see no behavior change.
+        var response = _disableThinking is null
+            ? await _chat.GetResponseAsync(prompt, cancellationToken: ct)
+            : await _chat.GetResponseAsync(prompt, new ChatOptions { AdditionalProperties = _disableThinking }, ct);
         return response.Text ?? string.Empty;
     }
 

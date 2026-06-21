@@ -13,6 +13,10 @@ sealed class EntityRefinementService(IChatClient chat, IOptions<LlmOptions> llmO
 {
     readonly IChatClient _chat = chat;
     readonly bool _enabled = llmOpts.Value.EntityRefinement is not { Enabled: false };
+    // Resolved once: the thinking-disabled params for the active provider, applied to the
+    // refinement call so reasoning models don't burn the token budget before emitting JSON.
+    readonly AdditionalPropertiesDictionary? _disableThinking =
+        DisableThinkingParams.Resolve(llmOpts.Value.Provider, llmOpts.Value.DisableThinkingJsonForActive());
 
     /// <summary>
     /// Classify raw heuristic entities against a content string.
@@ -33,7 +37,9 @@ sealed class EntityRefinementService(IChatClient chat, IOptions<LlmOptions> llmO
 
         try
         {
-            var response = await _chat.GetResponseAsync(prompt, cancellationToken: ct);
+            var response = _disableThinking is null
+                ? await _chat.GetResponseAsync(prompt, cancellationToken: ct)
+                : await _chat.GetResponseAsync(prompt, new ChatOptions { AdditionalProperties = _disableThinking }, ct);
             var responseText = response.Text ?? "";
 
             // Extract JSON array from response

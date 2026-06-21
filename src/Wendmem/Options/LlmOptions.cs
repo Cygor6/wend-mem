@@ -65,6 +65,19 @@ public sealed class LlmOptions
     }
 
     /// <summary>
+    /// The configured <c>DisableThinkingJson</c> for the active provider (empty when unset).
+    /// See <c>DisableThinkingParams.Resolve</c> for how the effective additional-properties
+    /// are chosen. Added per-provider rather than per-call because all wend-mem LLM tasks are
+    /// extraction/classification that never benefit from a reasoning pass.
+    /// </summary>
+    public string DisableThinkingJsonForActive() => Provider switch
+    {
+        LlmProvider.LlamaCpp => LlamaCpp.DisableThinkingJson ?? "",
+        LlmProvider.Ollama => Ollama.DisableThinkingJson ?? "",
+        _ => ZAi.DisableThinkingJson ?? "",
+    };
+
+    /// <summary>
     /// Optional per-subsystem override for entity refinement.
     /// Null fields inherit from the active provider.
     /// </summary>
@@ -86,6 +99,13 @@ public sealed class ZAiOptions
     public string Endpoint { get; set; } = "https://api.z.ai/api/paas/v4/";
     public string ChatModel { get; set; } = "glm-5-turbo";
     public string? LightModel { get; set; }
+
+    /// <summary>
+    /// Raw JSON object (e.g. <c>{"thinking":{"type":"disabled"}}</c>) sent as additional
+    /// request properties to disable the model's reasoning/thinking pass. Blank falls back to
+    /// the built-in provider default. See <c>Services.DisableThinkingParams</c>.
+    /// </summary>
+    public string? DisableThinkingJson { get; set; }
 }
 
 /// <summary>
@@ -97,6 +117,13 @@ public sealed class OllamaOptions
     public string Endpoint { get; set; } = "http://localhost:11434/v1/";
     public string ChatModel { get; set; } = "llama3.1";
     public string? LightModel { get; set; }
+
+    /// <summary>
+    /// Raw JSON object (e.g. <c>{"think":false}</c>) sent as additional request properties to
+    /// disable the model's reasoning/thinking pass. Blank falls back to the built-in provider
+    /// default. See <c>Services.DisableThinkingParams</c>.
+    /// </summary>
+    public string? DisableThinkingJson { get; set; }
 }
 
 /// <summary>
@@ -110,6 +137,15 @@ public sealed class LlamaCppOptions
     public string Endpoint { get; set; } = "http://localhost:8080/v1/";
     public string ChatModel { get; set; } = "default";
     public string? LightModel { get; set; }
+
+    /// <summary>
+    /// Raw JSON object sent as additional request properties to disable the model's
+    /// reasoning/thinking pass. Model-dependent: e.g. Qwen3 uses
+    /// <c>{"chat_template_kwargs":{"enable_thinking":false}}</c>. Blank falls back to the
+    /// built-in provider default (llama.cpp default is empty/nothing). See
+    /// <c>Services.DisableThinkingParams</c>.
+    /// </summary>
+    public string? DisableThinkingJson { get; set; }
 }
 
 /// <summary>

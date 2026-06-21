@@ -124,7 +124,12 @@ static class WendmemServices
             var chat = sp.GetRequiredService<IChatClient>();
             var opts = sp.GetRequiredService<IOptions<LlmOptions>>().Value;
             var (_, _, model, _, _) = opts.ResolveActive();
-            return new LlmService(chat, model);
+            // Resolve the thinking-disabled params for the active provider once and attach them
+            // to every completion, so reasoning models (GLM-5, Qwen3) don't spend the token
+            // budget on reasoning_content. Configurable per provider via DisableThinkingJson.
+            var disableThinking = DisableThinkingParams.Resolve(
+                opts.Provider, opts.DisableThinkingJsonForActive());
+            return new LlmService(chat, model, disableThinking);
         });
 
         services
