@@ -11,7 +11,8 @@ internal sealed class WikiLintCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var json = args.Contains("--json");
 
         var linter = services.GetRequiredService<WikiLinter>();

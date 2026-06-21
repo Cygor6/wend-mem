@@ -53,4 +53,9 @@ if (dispatchResult == -2)
     return await Wendmem.Http.HttpServerHost.RunAsync(args, cts.Token);
 }
 
+// A CLI command ran (dispatchResult >= 0). The hosted shutdown path does not
+// execute for short-lived CLI invocations, so checkpoint the WAL explicitly to
+// make write-performing commands (mine, okf import, skills add, ...) durable.
+host.Services.GetRequiredService<Wendmem.Storage.DuckDbConnectionFactory>().CheckpointAndClose();
+
 return dispatchResult;

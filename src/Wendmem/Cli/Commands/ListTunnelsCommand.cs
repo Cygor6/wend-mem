@@ -8,12 +8,13 @@ internal sealed class ListTunnelsCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var room = ArgvHelpers.GetOption(args, "--room");
 
-        if (wing is null || room is null)
+        if (room is null)
         {
-            Console.Error.WriteLine("Usage: wendmem list-tunnels --wing W --room R");
+            Console.Error.WriteLine("Usage: wendmem list-tunnels --room R [--wing W]");
             return 1;
         }
 

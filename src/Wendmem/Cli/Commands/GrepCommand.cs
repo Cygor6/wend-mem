@@ -16,7 +16,8 @@ internal sealed class GrepCommand
             return 1;
         }
 
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var room = ArgvHelpers.GetOption(args, "--room");
         var context = ArgvHelpers.GetIntOption(args, "--context", 3);
 

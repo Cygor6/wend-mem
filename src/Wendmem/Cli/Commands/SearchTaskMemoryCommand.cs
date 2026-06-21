@@ -9,11 +9,12 @@ internal sealed class SearchTaskMemoryCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var query = ArgvHelpers.GetPositional(args, 0);
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
-        if (query is null || wing is null)
+        if (query is null)
         {
-            Console.Error.WriteLine("Usage: wendmem search-task-memory <query> --wing W [--limit N]");
+            Console.Error.WriteLine("Usage: wendmem search-task-memory <query> [--wing W] [--limit N]");
             return 1;
         }
 

@@ -15,7 +15,8 @@ internal sealed class SearchCommand
             return 1;
         }
 
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var limit = ArgvHelpers.GetIntOption(args, "--limit", 10);
 
         var storage = services.GetRequiredService<DrawerStorage>();

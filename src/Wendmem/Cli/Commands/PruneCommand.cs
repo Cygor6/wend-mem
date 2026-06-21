@@ -8,12 +8,8 @@ internal sealed class PruneCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem prune --wing W [--threshold 0.97]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var threshold = ArgvHelpers.GetFloatOption(args, "--threshold", 0.97f);
 

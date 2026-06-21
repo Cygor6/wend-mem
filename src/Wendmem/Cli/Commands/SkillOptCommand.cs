@@ -8,13 +8,14 @@ internal sealed class SkillOptCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var skill = ArgvHelpers.GetOption(args, "--skill");
 
-        if (wing is null || skill is null)
+        if (skill is null)
         {
             Console.Error.WriteLine(
-                "Usage: wendmem skill-opt --wing W --skill SKILL.md [--epochs N] [--budget N] [--output PATH]");
+                "Usage: wendmem skill-opt --skill SKILL.md [--wing W] [--epochs N] [--budget N] [--output PATH]");
             return 1;
         }
 

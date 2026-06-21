@@ -1,4 +1,5 @@
-﻿using Wendmem.Options;
+﻿using System.Reflection;
+using Wendmem.Options;
 
 namespace Wendmem.Tests;
 
@@ -62,6 +63,36 @@ sealed class RegistrationDriftTests
             await Assert.That(hasAttr).IsTrue()
                 .Because($"Type {type.Name} must have [McpServerToolType] attribute");
         }
+    }
+
+    [Test]
+    public async Task McpTool_WingParameter_IsAlwaysOptional()
+    {
+        var offenders = new List<string>();
+
+        foreach (var type in ToolTypes)
+        {
+            var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+                                          BindingFlags.Static | BindingFlags.Instance);
+            foreach (var method in methods)
+            {
+                var isTool = method.GetCustomAttributes(false)
+                    .Any(a => a.GetType().Name == "McpServerToolAttribute");
+                if (!isTool)
+                    continue;
+
+                foreach (var p in method.GetParameters())
+                {
+                    if (p.Name == "wing" && !p.HasDefaultValue)
+                        offenders.Add($"{type.Name}.{method.Name}");
+                }
+            }
+        }
+
+        await Assert.That(offenders.Count).IsEqualTo(0)
+            .Because("every MCP tool 'wing' parameter must be optional (have a default) to avoid " +
+                     "a crash when the client omits it; offending methods: " +
+                     (offenders.Count == 0 ? "(none)" : string.Join(", ", offenders)));
     }
 
     [Test]

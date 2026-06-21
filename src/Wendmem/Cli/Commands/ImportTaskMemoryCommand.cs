@@ -11,11 +11,12 @@ internal sealed class ImportTaskMemoryCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var input = ArgvHelpers.GetPositional(args, 0);
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
-        if (input is null || wing is null)
+        if (input is null)
         {
-            Console.Error.WriteLine("Usage: wendmem import-task-memory <path.jsonl> --wing W");
+            Console.Error.WriteLine("Usage: wendmem import-task-memory <path.jsonl> [--wing W]");
             return 1;
         }
 

@@ -1,6 +1,5 @@
 ﻿using System.Text.RegularExpressions;
 using Wendmem.Cli.Commands;
-using Wendmem.Models;
 using Wendmem.Storage;
 using Wendmem.Wiki;
 using Wendmem.Wiki.Models;

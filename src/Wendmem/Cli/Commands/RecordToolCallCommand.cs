@@ -8,14 +8,15 @@ internal sealed class RecordToolCallCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var tool = ArgvHelpers.GetOption(args, "--tool");
         var inputJson = ArgvHelpers.GetOption(args, "--input") ?? "{}";
         var outputJson = ArgvHelpers.GetOption(args, "--output") ?? "{}";
 
-        if (wing is null || tool is null)
+        if (tool is null)
         {
-            Console.Error.WriteLine("Usage: wendmem record-tool-call --wing W --tool T [--input JSON] [--output JSON]");
+            Console.Error.WriteLine("Usage: wendmem record-tool-call --tool T [--wing W] [--input JSON] [--output JSON]");
             return 1;
         }
 

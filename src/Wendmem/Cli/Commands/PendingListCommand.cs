@@ -8,12 +8,8 @@ internal sealed class PendingListCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Error: --wing is required.");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var page = ArgvHelpers.GetOption(args, "--page");
         var limit = ArgvHelpers.GetIntOption(args, "--limit", 50);
 

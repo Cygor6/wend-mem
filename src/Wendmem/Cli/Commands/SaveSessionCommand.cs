@@ -9,12 +9,13 @@ internal sealed class SaveSessionCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var id = ArgvHelpers.GetOption(args, "--id");
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var content = ArgvHelpers.GetPositional(args, 0);
 
-        if (content is null || wing is null)
+        if (content is null)
         {
-            Console.Error.WriteLine("Usage: wendmem save-session <content> --wing W [--room R] [--id ID]");
+            Console.Error.WriteLine("Usage: wendmem save-session <content> [--wing W] [--room R] [--id ID]");
             return 1;
         }
 

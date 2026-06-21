@@ -9,11 +9,12 @@ internal sealed class SweepCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var path = ArgvHelpers.GetPositional(args, 0);
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
-        if (path is null || wing is null)
+        if (path is null)
         {
-            Console.Error.WriteLine("Usage: wendmem sweep <path> --wing W [--fix]");
+            Console.Error.WriteLine("Usage: wendmem sweep <path> [--wing W] [--fix]");
             return 1;
         }
 

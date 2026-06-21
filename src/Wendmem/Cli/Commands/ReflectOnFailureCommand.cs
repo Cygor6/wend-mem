@@ -12,11 +12,12 @@ internal sealed class ReflectOnFailureCommand
     {
         var failedPath = ArgvHelpers.GetOption(args, "--failed");
         var successPath = ArgvHelpers.GetOption(args, "--success");
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
-        if (failedPath is null || wing is null)
+        if (failedPath is null)
         {
-            Console.Error.WriteLine("Usage: wendmem reflect-on-failure --failed <failed.json> --wing W [--success <success.json>]");
+            Console.Error.WriteLine("Usage: wendmem reflect-on-failure --failed <failed.json> [--wing W] [--success <success.json>]");
             return 1;
         }
 

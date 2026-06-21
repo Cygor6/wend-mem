@@ -1,4 +1,6 @@
-﻿namespace Wendmem.Cli;
+﻿using Wendmem.Wiki;
+
+namespace Wendmem.Cli;
 
 internal static class ArgvHelpers
 {
@@ -8,6 +10,12 @@ internal static class ArgvHelpers
             if (args[i] == name)
                 return args[i + 1];
         return null;
+    }
+
+    public static string GetWing(string[] args, PalaceConfig config)
+    {
+        var wing = GetOption(args, "--wing");
+        return PathValidator.ResolveWing(wing, config);
     }
 
     public static int GetIntOption(string[] args, string name, int fallback)

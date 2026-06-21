@@ -670,9 +670,12 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
         if (wing is null)
         {
             cmd.CommandText = """
-                SELECT subject, predicate, object, source_ref FROM triples
-                WHERE valid_to IS NULL
-                ORDER BY confidence DESC, valid_from DESC
+                SELECT COALESCE(s.name, t.subject), t.predicate, COALESCE(o.name, t.object), t.source_ref
+                FROM triples t
+                LEFT JOIN entities s ON s.id = t.subject
+                LEFT JOIN entities o ON o.id = t.object
+                WHERE t.valid_to IS NULL
+                ORDER BY t.confidence DESC, t.valid_from DESC
                 LIMIT $limit
                 """;
         }
@@ -681,10 +684,15 @@ sealed partial class KnowledgeGraph(DuckDbConnectionFactory dbFactory, Services.
             // Filter by wing via the drawer that sourced each triple.
             // Triples without a drawer_id (drawer_id IS NULL) are excluded when
             // a wing filter is applied — they have no wing association.
+            // JOIN entities to resolve subject/object IDs to human-readable names
+            // so WakeUp's Active Facts section shows e.g. "config/configuration
+            // has_type Reference" instead of opaque 16-char hash IDs.
             cmd.CommandText = """
-                SELECT DISTINCT t.subject, t.predicate, t.object, t.source_ref
+                SELECT DISTINCT COALESCE(s.name, t.subject), t.predicate, COALESCE(o.name, t.object), t.source_ref
                 FROM triples t
                 JOIN drawers d ON d.id = t.drawer_id
+                LEFT JOIN entities s ON s.id = t.subject
+                LEFT JOIN entities o ON o.id = t.object
                 WHERE t.valid_to IS NULL
                   AND d.wing = $wing
                 ORDER BY t.confidence DESC, t.valid_from DESC

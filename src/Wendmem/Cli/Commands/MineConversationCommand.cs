@@ -15,12 +15,8 @@ internal sealed class MineConversationCommand
             return 1;
         }
 
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Error: --wing is required.");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var miner = services.GetRequiredService<ConversationMiner>();
 

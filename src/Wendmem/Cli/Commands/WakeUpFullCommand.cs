@@ -8,7 +8,8 @@ internal sealed class WakeUpFullCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var seedQuery = ArgvHelpers.GetOption(args, "--seed");
 
         var searcher = services.GetRequiredService<PalaceSearcher>();

@@ -9,7 +9,8 @@ internal sealed class WikiListCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var wiki = services.GetRequiredService<WikiStorage>();
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var headers = await wiki.IndexAsync(wing, ct);
 
         if (headers.Count == 0)

@@ -14,7 +14,8 @@ internal sealed class SkillsAddCommand
             Console.Error.WriteLine("Usage: wendmem skills add <folder_path> [--wing <wing>] [--force]");
             return 1;
         }
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var force = ArgvHelpers.HasFlag(args, "--force");
 
         var storage = services.GetRequiredService<SkillStorage>();
@@ -37,7 +38,8 @@ internal sealed class SkillsListCommand
 {
     public async Task<int> RunAsync(string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var json = ArgvHelpers.HasFlag(args, "--json");
 
         var storage = services.GetRequiredService<SkillStorage>();
@@ -186,9 +188,9 @@ internal sealed class SkillsReindexCommand
     public async Task<int> RunAsync(string[] args, IServiceProvider services, CancellationToken ct)
     {
         var root = ArgvHelpers.GetOption(args, "--root");
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-
         var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
+
         var storage = services.GetRequiredService<SkillStorage>();
 
         var rootDir = root ?? ExpandSkillsRoot(config.SkillsRoot);

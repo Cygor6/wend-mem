@@ -57,6 +57,7 @@ internal static class CliDispatcher
             "room-patterns" => await new RoomPatternsCommand().RunAsync(args[1..], services, ct),
             "kg-eval" => await new KgEvalCommand().RunAsync(args[1..], services, ct),
             "skill-opt" => await new SkillOptCommand().RunAsync(args[1..], services, ct),
+            "okf" => await new OkfCommand().RunAsync(args[1..], services, ct),
             "graph" => await GraphCommand.RunAsync(args[1..], services, ct),
             "rescore" => await new RescoreCommand().RunAsync(args[1..], services, ct),
             "calibrate" => await new CalibrateCommand().RunAsync(args[1..], services, ct),
@@ -85,7 +86,7 @@ internal static class CliDispatcher
     {
         Console.Out.WriteLine("""
             Usage:
-              wendmem pending list --wing W [--page <path>] [--limit N]
+              wendmem pending list [--wing W] [--page <path>] [--limit N]
               wendmem pending dismiss --page <path> --drawer <id>
             """);
         return 0;
@@ -126,13 +127,14 @@ internal static class CliDispatcher
               wendmem search-semantic <query>     Search drawers (cosine)
               wendmem grep <query>                Context-window grep
               wendmem grep-exact <pattern>        Exact string or regex search
-              wendmem mine <path> --wing W        Mine a file or directory
+              wendmem mine <path> [--wing W]     Mine a file or directory
               wendmem mine-conversation <path>    Mine a conversation transcript
-              wendmem sweep <path> --wing W       Scan for missed/stale files
-              wendmem wakeup-full [--wing W]        Full wakeup with content
-              wendmem save-session <text> --wing W   Save session state
+              wendmem okf import <bundle> [--wing W]   Import an OKF v0.1 bundle
+              wendmem sweep <path> [--wing W]    Scan for missed/stale files
+              wendmem wakeup-full [--wing W]      Full wakeup with content
+              wendmem save-session <text> [--wing W]   Save session state
               wendmem delete-drawer <id>          Delete a drawer
-              wendmem prune --wing W              Prune near-duplicate drawers
+              wendmem prune [--wing W]            Prune near-duplicate drawers
 
             Wiki:
               wendmem wiki list [--wing W]        List wiki pages
@@ -140,29 +142,29 @@ internal static class CliDispatcher
               wendmem wiki read <path>            Read a wiki page
 
             Pending updates:
-              wendmem pending list --wing W [--page <path>] [--limit N]
+              wendmem pending list [--wing W] [--page <path>] [--limit N]
               wendmem pending dismiss --page <path> --drawer <id>
 
             Activity:
               wendmem activity [--wing W] [--limit N]
 
             Distill:
-              wendmem distill --wing W --summary <text> [--hints <paths>]
+              wendmem distill [--wing W] --summary <text> [--hints <paths>]
 
             Knowledge graph:
               wendmem add-tunnel --topic T ...    Create cross-wing tunnel
-              wendmem list-tunnels --wing W --room R
+              wendmem list-tunnels [--wing W] --room R
               wendmem list-tunnels-by-topic <topic>
-              wendmem kg-resolve --wing W         Resolve duplicate entities & predicates
-              wendmem kg-eval --wing W            Evaluate retrieval quality via KG triples
-              wendmem skill-opt --wing W --skill S   Optimize SKILL.md using kg-eval validation
+              wendmem kg-resolve [--wing W]       Resolve duplicate entities & predicates
+              wendmem kg-eval [--wing W]          Evaluate retrieval quality via KG triples
+              wendmem skill-opt [--wing W] --skill S   Optimize SKILL.md using kg-eval validation
               wendmem room-patterns               Show fallback extensions to add to config
 
             Salience:
-              wendmem rescore --wing W [--llm] [--limit N]
+              wendmem rescore [--wing W] [--llm] [--limit N]
 
             Episodes:
-              wendmem episode list --wing <wing> [--outcome success|failure|partial] [--limit N]
+              wendmem episode list [--wing <wing>] [--outcome success|failure|partial] [--limit N]
               wendmem episode show <id>
               wendmem episode delete <id>
 
@@ -177,34 +179,34 @@ internal static class CliDispatcher
               wendmem skills new <name> [--root <dir>]
 
             Reflection:
-              wendmem reflect run --wing <wing> [--lookback N] [--write]
-              wendmem reflect drafts list --wing <wing>
+              wendmem reflect run [--wing <wing>] [--lookback N] [--write]
+              wendmem reflect drafts list [--wing <wing>]
               wendmem reflect drafts show <id>
               wendmem reflect drafts dismiss <id>
               wendmem reflect drafts accept <id>
 
             Calibration:
-              wendmem calibrate --wing W [--samples N] [--write-config] [--dry-run]
+              wendmem calibrate [--wing W] [--samples N] [--write-config] [--dry-run]
 
             Graph visualization:
-              wendmem graph --wing W [--output <path>] [--limit N]
+              wendmem graph [--wing W] [--output <path>] [--limit N]
                             [--no-drawers] [--no-triples] [--no-episodes] [--no-skills]
 
             Experience memory:
-              wendmem search-task-memory <query> --wing W
-              wendmem distill-task-memory <file> --wing W
+              wendmem search-task-memory <query> [--wing W]
+              wendmem distill-task-memory <file> [--wing W]
               wendmem record-outcome [--success] <id...>
-              wendmem reflect-on-failure --failed <f> --wing W [--success <s>]
-              wendmem prune-task-memory --wing W
-              wendmem export-task-memory --wing W --output <path>
-              wendmem import-task-memory <path> --wing W
+              wendmem reflect-on-failure --failed <f> [--wing W] [--success <s>]
+              wendmem prune-task-memory [--wing W]
+              wendmem export-task-memory [--wing W] --output <path>
+              wendmem import-task-memory <path> [--wing W]
 
             Tool memory:
-              wendmem record-tool-call --wing W --tool T
-              wendmem summarize-tool-calls --wing W --tool T
-              wendmem get-tool-guidelines --wing W --tool T
-              wendmem get-tool-statistics --wing W --tool T
-              wendmem list-tool-calls --wing W --tool T
+              wendmem record-tool-call [--wing W] --tool T
+              wendmem summarize-tool-calls [--wing W] --tool T
+              wendmem get-tool-guidelines [--wing W] --tool T
+              wendmem get-tool-statistics [--wing W] --tool T
+              wendmem list-tool-calls [--wing W] --tool T
 
             General:
               wendmem stats                       Show palace statistics
@@ -246,7 +248,7 @@ internal static class CliDispatcher
         {
             Console.Out.WriteLine("""
                 Usage:
-                  wendmem episode list --wing <wing> [--outcome success|failure|partial] [--limit N]
+                  wendmem episode list [--wing <wing>] [--outcome success|failure|partial] [--limit N]
                   wendmem episode show <id>
                   wendmem episode delete <id>
                 """);
@@ -314,8 +316,8 @@ internal static class CliDispatcher
         {
             Console.Out.WriteLine("""
                 Usage:
-                  wendmem reflect run --wing <wing> [--lookback N] [--write]
-                  wendmem reflect drafts list --wing <wing> [--status pending|accepted|dismissed]
+                  wendmem reflect run [--wing <wing>] [--lookback N] [--write]
+                  wendmem reflect drafts list [--wing <wing>] [--status pending|accepted|dismissed]
                   wendmem reflect drafts show <id>
                   wendmem reflect drafts dismiss <id>
                   wendmem reflect drafts accept <id>

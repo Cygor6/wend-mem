@@ -8,12 +8,8 @@ internal sealed class KgResolveCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem kg-resolve --wing W [--threshold 0.82]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var resolver = services.GetRequiredService<KgResolver>();
         var result = await resolver.ResolveAsync(wing, ct);

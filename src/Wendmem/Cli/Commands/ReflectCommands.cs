@@ -8,12 +8,8 @@ internal sealed class ReflectRunCommand
 {
     public async Task<int> RunAsync(string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem reflect run --wing <wing> [--lookback N] [--write]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var lookback = ArgvHelpers.GetIntOption(args, "--lookback", 50);
         var write = ArgvHelpers.HasFlag(args, "--write");
 
@@ -45,12 +41,8 @@ internal sealed class ReflectDraftsListCommand
 {
     public async Task<int> RunAsync(string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem reflect drafts list --wing <wing> [--status pending|accepted|dismissed]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var status = ArgvHelpers.GetOption(args, "--status") ?? "pending";
         var draftStorage = services.GetRequiredService<ReflectionDraftStorage>();
         var drafts = await draftStorage.ListPendingAsync(wing, 20, ct);

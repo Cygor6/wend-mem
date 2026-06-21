@@ -301,9 +301,9 @@ sealed class DrawerTools
                      "a drawer is that it preserves the original wording. If you need to compress, " +
                      "use WikiWrite, not AddMemory.")]
         string text,
-        [Description("Wing namespace, typically the project or topic boundary " +
-                     "(e.g. 'wendmem', 'user-prefs').")]
-        string wing,
+        [Description("Wing namespace (optional — omit to use the configured default wing). " +
+                     "Example: 'wendmem', 'user-prefs'.")]
+        string? wing = null,
         [Description("Subdivision within the wing (e.g. 'architecture', 'decisions', 'bugs', 'meetings').")]
         string? room = null,
         [Description("Optional origin (file path, URL, or conversation URI) for traceability. " +

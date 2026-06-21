@@ -8,12 +8,13 @@ internal sealed class GetToolGuidelinesCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var tool = ArgvHelpers.GetOption(args, "--tool");
 
-        if (wing is null || tool is null)
+        if (tool is null)
         {
-            Console.Error.WriteLine("Usage: wendmem get-tool-guidelines --wing W --tool T");
+            Console.Error.WriteLine("Usage: wendmem get-tool-guidelines --tool T [--wing W]");
             return 1;
         }
 

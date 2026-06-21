@@ -108,6 +108,21 @@ public sealed class DuckDbConnectionFactory : IDisposable, IAsyncDisposable
         _writeConnection.Dispose();
     }
 
+    public void CheckpointAndClose()
+    {
+        try
+        {
+            using var cmd = _writeConnection.CreateCommand();
+            cmd.CommandText = "CHECKPOINT";
+            cmd.ExecuteNonQuery();
+        }
+        catch { /* best-effort: a failed checkpoint still leaves a replayable WAL */ }
+        finally
+        {
+            _writeConnection.Dispose();
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
         _writeLock.Dispose();

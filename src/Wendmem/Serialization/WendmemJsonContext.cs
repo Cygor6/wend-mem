@@ -3,6 +3,7 @@ using Wendmem.Cli.Commands;
 using Wendmem.Eval;
 using Wendmem.Experiences;
 using Wendmem.Models;
+using Wendmem.Services.Okf;
 using Wendmem.Tools;
 using Wendmem.Wiki.Models;
 
@@ -97,4 +98,7 @@ namespace Wendmem.Serialization;
 [JsonSerializable(typeof(GraphData))]
 [JsonSerializable(typeof(List<GraphNode>))]
 [JsonSerializable(typeof(List<GraphLink>))]
+[JsonSerializable(typeof(OkfConceptResult))]
+[JsonSerializable(typeof(OkfImportReport))]
+[JsonSerializable(typeof(List<OkfConceptResult>))]
 public sealed partial class WendmemJsonContext : JsonSerializerContext;

@@ -119,9 +119,9 @@ sealed class WikiMaintenanceTools
         ActivityLog activityLog,
         PalaceConfig config,
         ILogger<WikiMaintenanceTools> logger,
-        [Description("Wing.")] string wing,
         [Description("One-paragraph summary of what was decided, built, or learned this session. " +
                      "Write it as if briefing your future self at the start of the next session.")] string sessionSummary,
+        [Description("Wing (optional — omit to use the configured default wing).")] string? wing = null,
         [Description("Hint at relevant page paths (optional, comma-separated).")] string? pageHints = null,
         CancellationToken ct = default)
     {

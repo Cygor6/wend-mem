@@ -8,12 +8,8 @@ internal sealed class EpisodeListCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem episode list --wing <wing> [--outcome success|failure|partial] [--limit N]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var outcome = ArgvHelpers.GetOption(args, "--outcome") ?? "any";
         var limit = ArgvHelpers.GetIntOption(args, "--limit", 20);

@@ -75,9 +75,6 @@ public class WikiTools
                      "Stable identity — re-writing the same path overwrites. " +
                      "Example: 'rag/vyer-kommandon', 'auth-flow', 'architecture/storage'.")]
         string path,
-        [Description("Wing namespace. ASCII kebab-case, slashes for hierarchy, no trailing characters. " +
-                     "Example: 'wms', 'rag/supplier'.")]
-        string wing,
         [Description("Human-readable title in sentence case (e.g. 'Wakeup design'), " +
                      "not Title Case ('Wakeup Design'). Shown in indexes and search results.")]
         string title,
@@ -90,6 +87,9 @@ public class WikiTools
                      "Example: 'a3f2b1c8d4e5f607,c8e4d2a1b91f0a7e'. " +
                      "The system rejects citations to non-existent drawers.")]
         string citations,
+        [Description("Wing namespace (optional — omit to use the configured default wing). " +
+                     "ASCII kebab-case, slashes for hierarchy. Example: 'wms', 'rag/supplier'.")]
+        string? wing = null,
         [Description("Optional agent identifier for the audit log (e.g. 'claude-code', 'goose-glm').")]
         string? agent = null,
         CancellationToken ct = default)

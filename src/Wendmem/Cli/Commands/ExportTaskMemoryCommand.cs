@@ -11,12 +11,13 @@ internal sealed class ExportTaskMemoryCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var output = ArgvHelpers.GetOption(args, "--output");
 
-        if (wing is null || output is null)
+        if (output is null)
         {
-            Console.Error.WriteLine("Usage: wendmem export-task-memory --wing W --output <path.jsonl>");
+            Console.Error.WriteLine("Usage: wendmem export-task-memory --output <path.jsonl> [--wing W]");
             return 1;
         }
 

@@ -11,11 +11,12 @@ internal sealed class DistillTaskMemoryCommand
         string[] args, IServiceProvider services, CancellationToken ct)
     {
         var path = ArgvHelpers.GetPositional(args, 0);
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
-        if (path is null || wing is null)
+        if (path is null)
         {
-            Console.Error.WriteLine("Usage: wendmem distill-task-memory <trajectories.json> --wing W");
+            Console.Error.WriteLine("Usage: wendmem distill-task-memory <trajectories.json> [--wing W]");
             return 1;
         }
 

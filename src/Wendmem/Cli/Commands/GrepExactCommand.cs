@@ -15,7 +15,8 @@ internal sealed class GrepExactCommand
             return 1;
         }
 
-        var wing = ArgvHelpers.GetOption(args, "--wing");
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
         var room = ArgvHelpers.GetOption(args, "--room");
         var limit = ArgvHelpers.GetIntOption(args, "--limit", 20);
 

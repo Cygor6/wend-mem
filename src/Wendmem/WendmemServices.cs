@@ -87,7 +87,13 @@ static class WendmemServices
             .AddSingleton<Chunkers.TopicShiftChunker>()
             .AddSingleton<FileMiner>()
             .AddSingleton<ConversationMiner>()
-            .AddSingleton<PalaceConfig>()
+            .AddSingleton(sp =>
+            {
+                var config = configuration.GetSection("Palace").Get<PalaceConfig>() ?? new PalaceConfig();
+                if (string.IsNullOrWhiteSpace(config.DefaultWing))
+                    config.DefaultWing = "work";
+                return config;
+            })
             .AddSingleton<PalaceSearcher>()
             .AddSingleton<Sweeper>()
             .AddSingleton<EntityRefinementService>()
@@ -148,6 +154,7 @@ static class WendmemServices
             .AddSingleton<ToolMemoryDistiller>()
             .AddSingleton<EpisodeStorage>()
             .AddSingleton<SkillStorage>()
+            .AddSingleton<Services.Okf.OkfImporter>()
             .AddSingleton<ReflectionDraftStorage>()
             .AddSingleton<ReflectionService>()
             .AddSingleton<GraphDataService>();

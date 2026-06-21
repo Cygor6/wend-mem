@@ -47,12 +47,8 @@ internal static class GraphCommand
     internal static async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem graph --wing <wing> [--output <path>] [--limit N] [--no-drawers] [--no-triples] [--no-episodes] [--no-skills]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var opts = new GraphOptions(
             Wing: wing,

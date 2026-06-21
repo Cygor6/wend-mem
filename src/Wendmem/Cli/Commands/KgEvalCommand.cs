@@ -10,12 +10,8 @@ internal sealed class KgEvalCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem kg-eval --wing W [--questions N] [--seed S] [--json]");
-            return 1;
-        }
+        var config = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, config);
 
         var questions = ArgvHelpers.GetIntOption(args, "--questions", 20);
         var seedRaw = ArgvHelpers.GetOption(args, "--seed");

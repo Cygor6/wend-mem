@@ -14,12 +14,8 @@ internal sealed class CalibrateCommand
     public async Task<int> RunAsync(
         string[] args, IServiceProvider services, CancellationToken ct)
     {
-        var wing = ArgvHelpers.GetOption(args, "--wing");
-        if (wing is null)
-        {
-            Console.Error.WriteLine("Usage: wendmem calibrate --wing <wing> [--samples <n>] [--write-config] [--dry-run]");
-            return 1;
-        }
+        var palaceConfig = services.GetRequiredService<PalaceConfig>();
+        var wing = ArgvHelpers.GetWing(args, palaceConfig);
 
         int samples = ArgvHelpers.GetIntOption(args, "--samples", 200);
         bool writeConfig = ArgvHelpers.HasFlag(args, "--write-config");
@@ -32,7 +28,6 @@ internal sealed class CalibrateCommand
         var embedder = services.GetRequiredService<IEmbedder>();
         var storage = services.GetRequiredService<DrawerStorage>();
         var kg = services.GetRequiredService<KnowledgeGraph>();
-        var palaceConfig = services.GetRequiredService<PalaceConfig>();
         var modelOpts = services.GetRequiredService<IOptions<ModelsOptions>>().Value;
 
         if (!embedder.IsAvailable)
