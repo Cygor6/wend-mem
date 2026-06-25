@@ -42,13 +42,17 @@ sealed class PalaceSearcher(
     const float MmrLambda = 0.7f;
 
     public async Task<WakeUpResult> WakeUpAsync(
-        string? wing, string? seedQuery, CancellationToken ct = default)
+        string? wing, string? seedQuery, CancellationToken ct = default,
+        string? callerWing = null)
     {
-        var cacheKey = $"wakeup:{wing ?? ""}:{seedQuery ?? ""}";
+        // callerWing (the pre-ResolveWing value) participates in the cache key:
+        // in ForceDefaultWing mode the resolved wing is always DefaultWing, so two
+        // calls differing only by callerWing must not collide here.
+        var cacheKey = $"wakeup:{wing ?? ""}:{seedQuery ?? ""}:{callerWing ?? ""}";
         if (cache.TryGetValue(cacheKey, out WakeUpResult? cached))
             return cached;
 
-        var result = await WakeUpCoreAsync(wing, seedQuery, ct);
+        var result = await WakeUpCoreAsync(wing, seedQuery, ct, callerWing);
 
         cache.Set(cacheKey, result, new MemoryCacheEntryOptions
         {
@@ -59,8 +63,26 @@ sealed class PalaceSearcher(
     }
 
     async Task<WakeUpResult> WakeUpCoreAsync(
-        string? wing, string? seedQuery, CancellationToken ct)
+        string? wing, string? seedQuery, CancellationToken ct, string? callerWing = null)
     {
+        // In single-wing (ForceDefaultWing) deployments PathValidator.ResolveWing
+        // discards the caller's wing for routing, but it still carries semantic
+        // signal about what the user wants. Fold it into the L2 seed so it biases
+        // the query vector — but only when it is a real hint (non-empty, distinct
+        // from the default wing). In multi-wing mode the wing is already a storage
+        // routing key; concatenating it would be noise, so effectiveSeed == seedQuery.
+        // This affects only the L2 embedding (and, through overFetch, the
+        // SeedTopScore/labels capture); episodes/skills retrieval stays on the
+        // user's literal seedQuery, and the side-index boost stays on raw tokens.
+        string effectiveSeed = seedQuery ?? "";
+        if (config.ForceDefaultWing
+            && !string.IsNullOrWhiteSpace(seedQuery)
+            && !string.IsNullOrWhiteSpace(callerWing)
+            && !string.Equals(callerWing.Trim(), config.DefaultWing.Trim(),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            effectiveSeed = $"{callerWing} {seedQuery}";
+        }
         // L0: All synthesis drawers (always included, regardless of budget)
         var synthesis = await storage.SynthesisDrawersAsync(wing, ct);
 
@@ -78,11 +100,26 @@ sealed class PalaceSearcher(
             .Concat(recentSource.Select(d => d.Id))
             .ToHashSet();
         IReadOnlyList<DrawerResult> semanticSource = [];
+        // Pre-exclusion seed-match diagnostics for the decision_support envelope.
+        // Captured BEFORE the excludeIds/threshold/MMR/budget cuts so the envelope
+        // honestly reflects the best semantic candidate even when those candidates
+        // are de-duped into L0/L1 (which would otherwise leave L2 empty).
+        float seedTopScore = 0f;
+        string[]? seedLabels = null;
         if (!string.IsNullOrWhiteSpace(seedQuery))
         {
-            var rawVec = await embedder.EmbedQueryAsync(seedQuery, ct);
+            var rawVec = await embedder.EmbedQueryAsync(effectiveSeed, ct);
             var overFetch = await storage.SearchAsync(rawVec, wing, null,
                 k: RelevanceCount * 3, ct: ct);
+
+            // Capture best candidate score + short labels from the pre-exclusion set.
+            seedTopScore = overFetch.Count > 0 ? overFetch[0].Score : 0f;
+            seedLabels = overFetch
+                .Take(3)
+                .Select(r => string.IsNullOrWhiteSpace(r.Drawer.Source)
+                    ? $"{r.Drawer.Wing}/{r.Drawer.Room}"
+                    : System.IO.Path.GetFileName(r.Drawer.Source))
+                .ToArray();
 
             // MMR diversify to break hubness
             var candidates = overFetch
@@ -302,7 +339,7 @@ sealed class PalaceSearcher(
         if (content.Length > charBudget)
             content = content[..charBudget];
 
-        return new WakeUpResult(content, synthesis.Count, l1List.Count, l2List.Count);
+        return new WakeUpResult(content, synthesis.Count, l1List.Count, l2List.Count, seedTopScore, seedLabels);
     }
 
     public async Task<string> WakeUpFullAsync(

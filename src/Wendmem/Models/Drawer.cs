@@ -1,4 +1,6 @@
-﻿namespace Wendmem.Models;
+﻿using System.Text.Json.Serialization;
+
+namespace Wendmem.Models;
 
 public enum ClusterRegime { Tight, Spread, Unknown }
 
@@ -56,5 +58,14 @@ public record AdmissionResult(string? Id, bool Admitted, string? Reason, string?
 
 /// <summary>
 /// Structured WakeUp result for tool-level logging.
+/// SeedTopScore / SeedLabels are pre-exclusion seed-match diagnostics carried
+/// for the WakeUp decision_support envelope only; they are not serialized into
+/// the result payload (JsonIgnore) so the agent-visible result is unchanged.
 /// </summary>
-public record WakeUpResult(string Content, int L0, int L1, int L2);
+public record WakeUpResult(
+    string Content,
+    int L0,
+    int L1,
+    int L2,
+    [property: JsonIgnore] float SeedTopScore = 0f,
+    [property: JsonIgnore] string[]? SeedLabels = null);

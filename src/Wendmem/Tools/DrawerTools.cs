@@ -43,21 +43,72 @@ sealed class DrawerTools
                 WendmemJsonContext.Default.McpResponseWakeUpResult);
         }
 
+        // Capture the caller's wing BEFORE ResolveWing forces it to DefaultWing.
+        // In ForceDefaultWing deployments this value is discarded for routing but
+        // still carries semantic signal; PalaceSearcher folds it into the L2 seed.
+        var callerWing = wing;
         wing = PathValidator.ResolveWing(wing, config);
 
-        logger.LogInformation("WakeUp wing={Wing} seed={Seed}", wing, seedQuery);
-        var result = await searcher.WakeUpAsync(wing, seedQuery, ct);
-        logger.LogInformation("WakeUp → L0:{L0} L1:{L1} L2:{L2} drawers", result.L0, result.L1, result.L2);
+        logger.LogInformation("WakeUp wing={Wing} callerWing={CallerWing} seed={Seed}",
+            wing, callerWing, seedQuery);
+        var result = await searcher.WakeUpAsync(wing, seedQuery, ct, callerWing: callerWing);
+        logger.LogInformation("WakeUp → L0:{L0} L1:{L1} L2:{L2} drawers (seedTop={Score:F2})",
+            result.L0, result.L1, result.L2, result.SeedTopScore);
+
+        // Per SKILL.md v4.2 §2, WakeUp MUST return confidence: null (only
+        // SearchMemories populates confidence). The honest match signal lives in
+        // decision_support, derived from the real pre-exclusion seed-match score
+        // against the existing wing-resolved thresholds (WakeUpMinL2Score,
+        // CanProceedMin). can_proceed stays true: the map loaded and L0/L1 are
+        // valid orientation regardless of whether the seed matched.
+        var (suggestedAction, summary) = ComputeWakeUpGuidance(
+            seedQuery, result.SeedTopScore, result.L2, result.SeedLabels,
+            config.WakeUpMinL2Score, config.GetThresholds(wing).CanProceedMin);
 
         var decisionSupport = new McpDecisionSupport(
             CanProceed: true,
-            SuggestedAction: SuggestedAction.Proceed,
-            Summary: $"Palace map retrieved. {result.L0 + result.L1 + result.L2} drawers visible in synthesis and recent activity."
+            SuggestedAction: suggestedAction,
+            Summary: summary
         );
 
         return JsonSerializer.Serialize(
             McpResponse.Ok("WakeUp", result, sw.ElapsedMilliseconds, decisionSupport: decisionSupport),
             WendmemJsonContext.Default.McpResponseWakeUpResult);
+    }
+
+    /// <summary>
+    /// Pure four-band decision for the WakeUp envelope. Extracted so it is
+    /// unit-testable without the MCP host. Bands (wing-resolved thresholds):
+    /// no-seed → proceed; confident (top ≥ CanProceedMin AND ≥1 L2 survivor) →
+    /// proceed; near-miss (top ≥ WakeUpMinL2Score) → ask_user; empty → verify.
+    /// </summary>
+    internal static (SuggestedAction Action, string Summary) ComputeWakeUpGuidance(
+        string? seedQuery, float seedTopScore, int l2Survivors,
+        string[]? seedLabels, float minL2, float canProceedMin)
+    {
+        // Locale-stable score formatting so the agent-visible summary does not
+        // vary by server culture (comma vs dot decimal separator).
+        var top = seedTopScore.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+
+        if (string.IsNullOrWhiteSpace(seedQuery))
+            return (SuggestedAction.Proceed,
+                "No seedQuery provided — returning synthesis and recent drawers only; no semantic search performed.");
+
+        if (seedTopScore >= canProceedMin && l2Survivors >= 1)
+            return (SuggestedAction.Proceed,
+                $"Matched {l2Survivors} drawer(s) for your query (top {top}).");
+
+        if (seedTopScore >= minL2)
+        {
+            var labels = seedLabels is { Length: > 0 } l
+                ? string.Join(", ", l)
+                : "(none named)";
+            return (SuggestedAction.AskUser,
+                $"No confident match for your query. Nearest context: {labels}. Confirm what you mean before relying on this.");
+        }
+
+        return (SuggestedAction.Verify,
+            $"No semantic matches for your query (top candidate {top}). Showing synthesis and recent context only — do not treat recent drawers as answers.");
     }
 
     [McpServerTool(Name = "SearchMemories"), Description(

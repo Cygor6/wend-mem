@@ -83,7 +83,7 @@ public static class McpResponse
         McpConfidence? confidence = null,
         McpDecisionSupport? decisionSupport = null)
         => new(true, result,
-            confidence ?? McpConfidence.Deterministic,
+            confidence,
             decisionSupport,
             Meta: new(tool, durationMs));
 
